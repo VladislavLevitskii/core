@@ -2,13 +2,15 @@
 
 import asyncio
 import logging
-from typing import cast, override
+from typing import TYPE_CHECKING, cast, override
 
 from aiopapouch import PapouchHTTPClient, is_device_supported
 from aiopapouch.exceptions import DeviceAuthError, DeviceConnectionError
 
-from homeassistant.core import HomeAssistant
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
+
+if TYPE_CHECKING:
+    from homeassistant.core import HomeAssistant
 
 ACTIVE_DISCOVERY_TIMEOUT = 2
 MAGIC_PACKET = b"\x00\x00\x00\xf6"
@@ -19,7 +21,7 @@ _LOGGER = logging.getLogger(__name__)
 
 
 class PapouchDiscoveryProtocol(asyncio.DatagramProtocol):
-    """Protocol implementation for broadcasting and receiving Papouch discovery packets."""
+    """Protocol for broadcasting and receiving Papouch discovery packets."""
 
     def __init__(self) -> None:
         """Initialize the protocol with the required magic packet and target port."""
@@ -31,7 +33,7 @@ class PapouchDiscoveryProtocol(asyncio.DatagramProtocol):
     @override
     def connection_made(self, transport: asyncio.BaseTransport) -> None:
         """Send the magic broadcast packet when the UDP connection is established."""
-        self.transport = cast(asyncio.DatagramTransport, transport)
+        self.transport = cast("asyncio.DatagramTransport", transport)
         self.transport.sendto(self.magic_packet, ("255.255.255.255", self.target_port))
 
     @override
@@ -48,7 +50,6 @@ async def _get_device_info(
 
     If it is an unsupported device the function returns None.
     """
-
     session = async_get_clientsession(hass)
     client = PapouchHTTPClient(ip_address, session)
 
@@ -75,8 +76,9 @@ async def async_discover_papouch_devices(
     Creates semaphore preventing network congestion and fail-safe timeout that
     will destroy the session afterwards.
 
-    Returns:
+    Return:
         A dictionary mapping IP addresses to a tuple containing (location, name)
+
     """
     loop = asyncio.get_running_loop()
 

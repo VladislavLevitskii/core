@@ -1,18 +1,21 @@
 """Select platform for the Papouch integration."""
 
-from typing import Any, override
+from typing import TYPE_CHECKING, Any, override
 
 import aiopapouch.exceptions as aiopapouch_exceptions
 
 from homeassistant.components.select import SelectEntity
-from homeassistant.core import HomeAssistant
 from homeassistant.helpers.device_registry import format_mac
-from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 
-from . import PapouchConfigEntry
-from .coordinator import PapouchDataUpdateCoordinator
 from .entity import PapouchEntity
 from .exceptions import PapouchAuthError, PapouchCommandError, PapouchConnectionError
+
+if TYPE_CHECKING:
+    from homeassistant.core import HomeAssistant
+    from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
+
+    from . import PapouchConfigEntry
+    from .coordinator import PapouchDataUpdateCoordinator
 
 PARALLEL_UPDATES = 0
 
@@ -62,8 +65,8 @@ class PapouchSelectEntity(PapouchEntity, SelectEntity):
 
         self._attr_options = select_data["options"]
 
-    @override
     @property
+    @override
     def current_option(self) -> str | None:
         """Return the currently selected option."""
         return self.coordinator.device.get_select_option(self.category, self.item_id)
@@ -71,14 +74,16 @@ class PapouchSelectEntity(PapouchEntity, SelectEntity):
     @override
     async def async_select_option(self, option: str) -> None:
         """Change the selected option on the device."""
-
         try:
             await self.coordinator.device.set_select_option(
                 self.category, self.item_id, option
             )
         except aiopapouch_exceptions.DeviceAuthError as err:
             raise PapouchAuthError(
-                translation_placeholders={"name": self.coordinator.device.name}
+                translation_placeholders={
+                    "name": self.coordinator.device.name,
+                    "location": self.coordinator.device.location,
+                }
             ) from err
         except aiopapouch_exceptions.DeviceConnectionError as err:
             raise PapouchConnectionError(

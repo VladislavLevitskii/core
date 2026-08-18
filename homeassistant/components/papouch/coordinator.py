@@ -2,17 +2,20 @@
 
 from datetime import timedelta
 import logging
-from typing import override
+from typing import TYPE_CHECKING, override
 
-from aiopapouch import PapouchDevice, PapouchTransport
 from aiopapouch.exceptions import DeviceAuthError, DeviceConnectionError
 
-from homeassistant.config_entries import ConfigEntry
-from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import ConfigEntryAuthFailed, ConfigEntryNotReady
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
 
 from .const import DEFAULT_SCAN_INTERVAL, DOMAIN
+
+if TYPE_CHECKING:
+    from aiopapouch import PapouchDevice, PapouchTransport
+
+    from homeassistant.config_entries import ConfigEntry
+    from homeassistant.core import HomeAssistant
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -47,7 +50,19 @@ class PapouchDataUpdateCoordinator(DataUpdateCoordinator):
             return await self.device.parse_fresh_data(fresh_data)
         except DeviceAuthError as err:
             raise ConfigEntryAuthFailed(
-                "Authentication failed, password might have changed."
+                translation_domain=DOMAIN,
+                translation_key="invalid_auth",
+                translation_placeholders={
+                    "name": self.device.name,
+                    "location": self.device.location,
+                },
             ) from err
         except DeviceConnectionError as err:
-            raise ConfigEntryNotReady(f"Error communicating with API: {err}") from None
+            raise ConfigEntryNotReady(
+                translation_domain=DOMAIN,
+                translation_key="cannot_connect",
+                translation_placeholders={
+                    "name": self.device.name,
+                    "location": self.device.location,
+                },
+            ) from err

@@ -1,18 +1,21 @@
 """Number platform for the Papouch integration."""
 
-from typing import Any, override
+from typing import TYPE_CHECKING, Any, override
 
 import aiopapouch.exceptions as aiopapouch_exceptions
 
 from homeassistant.components.number import NumberEntity, NumberMode
-from homeassistant.core import HomeAssistant
 from homeassistant.helpers.device_registry import format_mac
-from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 
-from . import PapouchConfigEntry
-from .coordinator import PapouchDataUpdateCoordinator
 from .entity import PapouchEntity
 from .exceptions import PapouchAuthError, PapouchCommandError, PapouchConnectionError
+
+if TYPE_CHECKING:
+    from homeassistant.core import HomeAssistant
+    from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
+
+    from . import PapouchConfigEntry
+    from .coordinator import PapouchDataUpdateCoordinator
 
 PARALLEL_UPDATES = 0
 
@@ -67,8 +70,8 @@ class PapouchNumber(PapouchEntity, NumberEntity):
 
         self._current_value: float = 1
 
-    @override
     @property
+    @override
     def native_value(self) -> float:
         """Return the local value, NOT the real hardware counter."""
         return self._current_value
@@ -76,14 +79,16 @@ class PapouchNumber(PapouchEntity, NumberEntity):
     @override
     async def async_set_native_value(self, value: float) -> None:
         """Send the command and update the UI."""
-
         try:
             await self.coordinator.device.set_number_value(
                 self.category, self.item_id, value
             )
         except aiopapouch_exceptions.DeviceAuthError as err:
             raise PapouchAuthError(
-                translation_placeholders={"name": self.coordinator.device.name}
+                translation_placeholders={
+                    "name": self.coordinator.device.name,
+                    "location": self.coordinator.device.location,
+                }
             ) from err
         except aiopapouch_exceptions.DeviceConnectionError as err:
             raise PapouchConnectionError(

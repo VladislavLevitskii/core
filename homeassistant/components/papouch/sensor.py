@@ -1,15 +1,18 @@
 """Sensor platform for the Papouch integration."""
 
-from typing import Any, cast, override
+from typing import TYPE_CHECKING, Any, cast, override
 
 from homeassistant.components.sensor import SensorEntity
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.device_registry import format_mac
-from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 
-from . import PapouchConfigEntry
-from .coordinator import PapouchDataUpdateCoordinator
 from .entity import PapouchEntity
+
+if TYPE_CHECKING:
+    from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
+
+    from . import PapouchConfigEntry
+    from .coordinator import PapouchDataUpdateCoordinator
 
 PARALLEL_UPDATES = 0
 
@@ -63,12 +66,12 @@ class PapouchSensor(PapouchEntity, SensorEntity):
         if "unit" in sensor_data:
             self._attr_native_unit_of_measurement = sensor_data["unit"]
 
-    @override
     @property
+    @override
     def native_value(self) -> float | int | None:
         """Return the state of the sensor."""
         value = self.coordinator.data.get(self.data_key, {}).get(self.item_id)
-        return cast(float | int | None, value)
+        return cast("float | int | None", value)
 
     @override
     @callback

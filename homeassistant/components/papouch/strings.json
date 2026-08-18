@@ -226,7 +226,10 @@
       "message": "Failed to execute command {cmd} on {name}."
     },
     "invalid_auth": {
-      "message": "Invalid password of device {name}"
+      "message": "Invalid password of device {name} ({location})"
+    },
+    "unsupported_device": {
+      "message": "Device {name} ({location}) is unsupported."
     }
   },
   "options": {

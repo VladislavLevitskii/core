@@ -1,17 +1,20 @@
 """Binary sensor platform for the Papouch integration."""
 
-from typing import Any, override
+from typing import TYPE_CHECKING, Any, override
 
 from homeassistant.components.binary_sensor import BinarySensorEntity
-from homeassistant.core import HomeAssistant
 from homeassistant.helpers.device_registry import format_mac
-from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 
-from . import PapouchConfigEntry
-from .coordinator import PapouchDataUpdateCoordinator
 from .entity import PapouchEntity
 
 PARALLEL_UPDATES = 0
+
+if TYPE_CHECKING:
+    from homeassistant.core import HomeAssistant
+    from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
+
+    from . import PapouchConfigEntry
+    from .coordinator import PapouchDataUpdateCoordinator
 
 
 async def async_setup_entry(
@@ -59,8 +62,8 @@ class PapouchBinarySensor(PapouchEntity, BinarySensorEntity):
         if "device_class" in sensor_data:
             self._attr_device_class = sensor_data["device_class"]
 
-    @override
     @property
+    @override
     def is_on(self) -> bool:
         """Return True if the binary sensor is on."""
         return bool(self.coordinator.data.get(self.data_key, {}).get(self.item_id) == 1)

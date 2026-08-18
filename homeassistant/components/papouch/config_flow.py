@@ -1,11 +1,10 @@
 """Config flow for the Papouch integration."""
 
 import asyncio
-from collections.abc import Mapping
 import ipaddress
 import logging
 import re
-from typing import Any, override
+from typing import TYPE_CHECKING, Any, override
 
 import aiohttp
 from aiopapouch import PapouchHTTPClient, create_device, is_device_supported
@@ -20,11 +19,17 @@ from homeassistant.config_entries import ConfigFlow, ConfigFlowResult, OptionsFl
 from homeassistant.core import callback
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.device_registry import format_mac
-from homeassistant.helpers.service_info.dhcp import DhcpServiceInfo
 
-from . import PapouchConfigEntry
 from .const import DEFAULT_SCAN_INTERVAL, DOMAIN
 from .discovery import async_discover_papouch_devices
+from .utils import _get_device_name
+
+if TYPE_CHECKING:
+    from collections.abc import Mapping
+
+    from homeassistant.helpers.service_info.dhcp import DhcpServiceInfo
+
+    from . import PapouchConfigEntry
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -47,7 +52,6 @@ class PapouchConfigFlow(ConfigFlow, domain=DOMAIN):
         self, ip_address: str, password: str = ""
     ) -> tuple[dict[str, str], int | None]:
         """Test the connection and return any errors and the device mode."""
-
         if not re.match(r"^(?:[0-9]{1,3}\.){3}[0-9]{1,3}$", ip_address):
             return {"ip_address": "invalid_ip_format"}, None
 
@@ -63,87 +67,76 @@ class PapouchConfigFlow(ConfigFlow, domain=DOMAIN):
             aiohttp.ClientError,
             DeviceConnectionError,
             TimeoutError,
-        ) as err:
-            _LOGGER.error("Failed to connect to the device: %s", err)
+        ):
+            _LOGGER.exception("Failed to connect to the device")
             return {"base": "cannot_connect"}, None
         else:
             return {}, mode_device
-
-    async def _get_device_name(self, ip_address: str, password: str = "") -> str:
-        """Fetch the real device name and location directly from the device."""
-        session = async_get_clientsession(self.hass)
-        client = PapouchHTTPClient(ip_address, session, password=password)
-        try:
-            name, location = await client.get_device_info()
-            if name and location:
-                return f"{name} ({location})"
-        except aiohttp.ClientError:
-            pass
-
-        return "Papouch Device"
 
     async def _async_process_user_input(
         self, user_input: dict[str, Any]
     ) -> tuple[dict[str, str], ConfigFlowResult | None]:
         """Process user input, test connection, and determine the next routing step."""
-
         for entry in self._async_current_entries():
             if entry.data.get("ip_address") == user_input["ip_address"]:
                 return {}, self.async_abort(reason="already_configured")
 
         ip_address = user_input["ip_address"]
         password = str(user_input.get("password", ""))
+
         errors, mode_device = await self._test_connection(
             user_input["ip_address"], password
         )
 
-        if not errors:
-            self._saved_input = user_input
-            if mode_device == -1:
-                return {}, self.async_abort(reason="mode_is_missing")
-            if mode_device != WEB_MODE_INDEX:
-                return {}, await self.async_step_web_mode()
+        if errors:
+            return errors, None
 
-            session = async_get_clientsession(self.hass)
-            client = PapouchHTTPClient(ip_address, session, password=password)
+        self._saved_input = user_input
 
-            title_name = await self._get_device_name(ip_address, password)
+        if mode_device == -1:
+            return {}, self.async_abort(reason="mode_is_missing")
+        if mode_device != WEB_MODE_INDEX:
+            return {}, await self.async_step_web_mode()
 
-            try:
-                mac_address = await client.get_device_mac()
-            except DeviceAuthError:
-                return {"base": "invalid_auth"}, None
-            except aiohttp.ClientError, DeviceLogicError:
-                return {"base": "cannot_connect"}, None
+        session = async_get_clientsession(self.hass)
+        client = PapouchHTTPClient(ip_address, session, password=password)
+        title_name = await _get_device_name(self.hass, ip_address, password)
 
-            if mac_address:
-                formatted_mac = format_mac(mac_address)
-                await self.async_set_unique_id(formatted_mac)
-                self._abort_if_unique_id_configured()
+        try:
+            mac_address = await client.get_device_mac()
+        except DeviceAuthError:
+            errors["base"] = "invalid_auth"
+        except aiohttp.ClientError, DeviceLogicError:
+            errors["base"] = "cannot_connect"
 
-            data = {
-                "ip_address": user_input["ip_address"],
-                "password": password,
-                "device_name": title_name,
-            }
-            options = {
-                "refresh_rate": user_input.get("refresh_rate", DEFAULT_SCAN_INTERVAL)
-            }
+        if errors:
+            return errors, None
 
-            return {}, self.async_create_entry(
-                title=f"{title_name} - {user_input['ip_address']}",
-                data=data,
-                options=options,
-            )
+        if mac_address:
+            formatted_mac = format_mac(mac_address)
+            await self.async_set_unique_id(formatted_mac)
+            self._abort_if_unique_id_configured()
 
-        return errors, None
+        data = {
+            "ip_address": user_input["ip_address"],
+            "password": password,
+            "device_name": title_name,
+        }
+        options = {
+            "refresh_rate": user_input.get("refresh_rate", DEFAULT_SCAN_INTERVAL)
+        }
+
+        return {}, self.async_create_entry(
+            title=f"{title_name} - {user_input['ip_address']}",
+            data=data,
+            options=options,
+        )
 
     @override
     async def async_step_dhcp(
         self, discovery_info: DhcpServiceInfo
     ) -> ConfigFlowResult:
         """Discover the device from a DHCP request."""
-
         self.discovered_ip = discovery_info.ip
         discovered_mac = format_mac(discovery_info.macaddress)
 
@@ -152,8 +145,8 @@ class PapouchConfigFlow(ConfigFlow, domain=DOMAIN):
         for entry in self._async_current_entries():
             if entry.unique_id == discovered_mac:
                 if entry.data.get("ip_address") != self.discovered_ip:
-                    new_name = await self._get_device_name(
-                        self.discovered_ip, entry.data.get("password", "")
+                    new_name = await _get_device_name(
+                        self.hass, self.discovered_ip, entry.data.get("password", "")
                     )
                     new_title = f"{new_name} - {self.discovered_ip}"
 
@@ -187,8 +180,8 @@ class PapouchConfigFlow(ConfigFlow, domain=DOMAIN):
         try:
             await asyncio.sleep(DHCP_TIMEOUT)
             device_name, device_location = await client.get_device_info()
-        except aiohttp.ClientError as err:
-            _LOGGER.error("Failed to fetch device info after DHCP: %s", err)
+        except aiohttp.ClientError:
+            _LOGGER.exception("Failed to fetch device info after DHCP")
             return self.async_abort(reason="cannot_connect")
 
         if not is_device_supported(device_name):
@@ -207,6 +200,9 @@ class PapouchConfigFlow(ConfigFlow, domain=DOMAIN):
         """Step after adding the device via DHCP."""
         errors: dict[str, str] = {}
 
+        if self.discovered_name is None:
+            return self.async_abort(reason="unsupported_device")
+
         if user_input is not None:
             user_input["ip_address"] = self.discovered_ip
             errors, result = await self._async_process_user_input(user_input)
@@ -221,8 +217,6 @@ class PapouchConfigFlow(ConfigFlow, domain=DOMAIN):
                 vol.Optional("password"): str,
             }
         )
-
-        assert self.discovered_name is not None
 
         return self.async_show_form(
             step_id="discovery_confirm",
@@ -329,7 +323,8 @@ class PapouchConfigFlow(ConfigFlow, domain=DOMAIN):
         return self.async_show_form(step_id="manual", data_schema=schema, errors=errors)
 
     async def async_step_web_mode(
-        self, user_input: dict[str, Any] | None = None
+        self,
+        user_input: dict[str, Any] | None = None,
     ) -> ConfigFlowResult:
         """Step where the user can switch the device into WEB mode via buttons."""
         return self.async_show_menu(
@@ -337,11 +332,12 @@ class PapouchConfigFlow(ConfigFlow, domain=DOMAIN):
         )
 
     async def async_step_execute_switch(
-        self, user_input: dict[str, Any]
+        self,
+        user_input: dict[str, Any],
     ) -> ConfigFlowResult:
-        """Action when user clicks the switch button."""
-
-        assert self._saved_input is not None
+        """Make action when user clicks the switch button."""
+        if self._saved_input is None:
+            return self.async_abort(reason="unsupported_device")
 
         session = async_get_clientsession(self.hass)
         password = self._saved_input.get("password", "")
@@ -357,7 +353,7 @@ class PapouchConfigFlow(ConfigFlow, domain=DOMAIN):
 
             await device.switch_to_web_mode()
 
-            title_name = await self._get_device_name(ip_address, password)
+            title_name = await _get_device_name(self.hass, ip_address, password)
 
             try:
                 mac_address = await client.get_device_mac()
@@ -390,18 +386,18 @@ class PapouchConfigFlow(ConfigFlow, domain=DOMAIN):
             return self.async_abort(reason="cannot_connect")
 
     async def async_step_abort_switch(
-        self, user_input: dict[str, Any] | None = None
+        self,
+        user_input: dict[str, Any] | None = None,
     ) -> ConfigFlowResult:
-        """Action when user clicks cancel."""
+        """Make action when user clicks cancel."""
         return self.async_abort(reason="web_mode_required")
 
     async def async_step_reauth(
-        self, entry_data: Mapping[str, Any]
+        self,
+        entry_data: Mapping[str, Any],
     ) -> ConfigFlowResult:
         """Handle initiation of re-authentication."""
-        self._reauth_entry = self.hass.config_entries.async_get_entry(
-            self.context["entry_id"]
-        )
+        self._reauth_entry = self._get_reauth_entry()
         return await self.async_step_reauth_confirm()
 
     async def async_step_reauth_confirm(
@@ -449,8 +445,15 @@ class PapouchConfigFlow(ConfigFlow, domain=DOMAIN):
     ) -> ConfigFlowResult:
         """Handle integration reconfiguration (e.g. IP address and password change)."""
         errors: dict[str, str] = {}
-        entry = self.hass.config_entries.async_get_entry(self.context["entry_id"])
-        assert entry is not None
+
+        entry_id = self.context.get("entry_id")
+        if not entry_id:
+            return self.async_abort(reason="unknown")
+
+        entry = self.hass.config_entries.async_get_entry(entry_id)
+
+        if entry is None:
+            return self.async_abort(reason="unknown")
 
         if user_input is not None:
             errors, _ = await self._test_connection(
@@ -458,8 +461,8 @@ class PapouchConfigFlow(ConfigFlow, domain=DOMAIN):
             )
 
             if not errors:
-                new_name = await self._get_device_name(
-                    user_input["ip_address"], user_input.get("password", "")
+                new_name = await _get_device_name(
+                    self.hass, user_input["ip_address"], user_input.get("password", "")
                 )
                 new_title = f"{new_name} - {user_input['ip_address']}"
 
