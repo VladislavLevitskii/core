@@ -71,7 +71,10 @@ class PapouchCommandButton(PapouchEntity, ButtonEntity):
 
         except aiopapouch_exceptions.DeviceAuthError as err:
             raise PapouchAuthError(
-                translation_placeholders={"name": self.coordinator.device.name}
+                translation_placeholders={
+                    "name": self.coordinator.device.name,
+                    "location": self.coordinator.device.location,
+                }
             ) from err
 
         except aiopapouch_exceptions.DeviceConnectionError as err:

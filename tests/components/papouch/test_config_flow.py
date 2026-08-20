@@ -107,7 +107,12 @@ async def test_manual_success(
 
     result2 = await hass.config_entries.flow.async_configure(
         result["flow_id"],
-        {"ip_address": "192.168.1.50", "refresh_rate": 60, "password": "admin"},
+        {
+            "ip_address": "192.168.1.50",
+            "refresh_rate": 60,
+            "password": "admin",
+            "web_port": 8080,
+        },
     )
 
     assert result2["type"] == data_entry_flow.FlowResultType.CREATE_ENTRY
@@ -115,6 +120,7 @@ async def test_manual_success(
     assert result2["data"]["ip_address"] == "192.168.1.50"
     assert result2["data"]["password"] == "admin"
     assert result2["data"]["device_name"] == "Quido (Lab)"
+    assert result2["data"]["web_port"] == 8080
     assert len(mock_setup_entry.mock_calls) == 1
 
 
@@ -275,7 +281,12 @@ async def test_web_mode_switch(
 
     result2 = await hass.config_entries.flow.async_configure(
         result["flow_id"],
-        {"ip_address": "192.168.1.50", "refresh_rate": 60, "password": "supersecret"},
+        {
+            "ip_address": "192.168.1.50",
+            "refresh_rate": 60,
+            "password": "supersecret",
+            "web_port": 8080,
+        },
     )
 
     assert result2["type"] == data_entry_flow.FlowResultType.MENU
@@ -289,6 +300,7 @@ async def test_web_mode_switch(
     assert result3["description"] == "web_mode_success"
     assert result3["title"] == "Quido (Lab) - 192.168.1.50"
     assert result3["data"]["password"] == "supersecret"
+    assert result3["data"]["web_port"] == 8080
     mock_create_device.return_value.switch_to_web_mode.assert_called_once()
 
 
@@ -734,13 +746,11 @@ async def test_reauth_flow(
     )
     entry.add_to_hass(hass)
 
-    # 1. Start Reauth
     result = await entry.start_reauth_flow(hass)
 
     assert result["type"] == data_entry_flow.FlowResultType.FORM
     assert result["step_id"] == "reauth_confirm"
 
-    # 2. Simulate bad password (DeviceAuthError)
     mock_fetch.side_effect = DeviceAuthError("Invalid password")
 
     result2 = await hass.config_entries.flow.async_configure(
@@ -751,7 +761,6 @@ async def test_reauth_flow(
     assert result2["type"] == data_entry_flow.FlowResultType.FORM
     assert result2["errors"] == {"base": "invalid_auth"}
 
-    # 3. Simulate correct password (Success)
     mock_fetch.side_effect = None
 
     result3 = await hass.config_entries.flow.async_configure(
@@ -762,6 +771,7 @@ async def test_reauth_flow(
     assert result3["type"] == data_entry_flow.FlowResultType.ABORT
     assert result3["reason"] == "reauth_successful"
     assert entry.data["password"] == "correct_password"
+    assert entry.data["web_port"] == 80
 
 
 async def test_reauth_connection_error(hass: HomeAssistant, mock_api_client) -> None:
@@ -825,7 +835,7 @@ async def test_reconfigure_flow_success(
     entry = MockConfigEntry(
         domain=DOMAIN,
         title="Quido (Lab) - 192.168.1.50",
-        data={"ip_address": "192.168.1.50", "password": "old_password"},
+        data={"ip_address": "192.168.1.50", "password": "old_password", "web_port": 80},
         unique_id="00:11:22:33:44:55",
     )
     entry.add_to_hass(hass)
@@ -840,7 +850,7 @@ async def test_reconfigure_flow_success(
 
     result2 = await hass.config_entries.flow.async_configure(
         result["flow_id"],
-        {"ip_address": "192.168.1.60", "password": "new_password"},
+        {"ip_address": "192.168.1.60", "password": "new_password", "web_port": 8080},
     )
 
     assert result2["type"] == data_entry_flow.FlowResultType.ABORT
@@ -848,6 +858,7 @@ async def test_reconfigure_flow_success(
 
     assert entry.data["ip_address"] == "192.168.1.60"
     assert entry.data["password"] == "new_password"
+    assert entry.data["web_port"] == 8080
 
 
 async def test_reconfigure_connection_error(

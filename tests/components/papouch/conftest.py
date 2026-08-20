@@ -120,5 +120,11 @@ def mock_papouch_client(mock_papouch_device):
     ):
         mock_client = mock_client_cls.return_value
         mock_client.ip_address = "192.168.1.50"
+
         mock_client.fetch_data = AsyncMock(return_value="<xml>fresh</xml>")
+        mock_client.get_device_info = AsyncMock(
+            return_value=("Test Papouch", "Test Lab")
+        )
+        mock_client.get_device_mac = AsyncMock(return_value="00:11:22:33:44:55")
+
         yield mock_client, mock_create, mock_papouch_device

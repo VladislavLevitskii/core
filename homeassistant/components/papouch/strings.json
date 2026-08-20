@@ -23,11 +23,13 @@
       "discovery_confirm": {
         "data": {
           "password": "Password (optional)",
-          "refresh_rate": "Scan Interval (seconds)"
+          "refresh_rate": "Scan Interval (seconds)",
+          "web_port": "HTTP Port"
         },
         "data_description": {
           "password": "Leave blank if your device does not require authentication.",
-          "refresh_rate": "How often Home Assistant should poll the device for new data."
+          "refresh_rate": "How often Home Assistant should poll the device for new data.",
+          "web_port": "The HTTP port of the device. Default is 80."
         },
         "description": "Do you want to add {name} to Home Assistant?",
         "title": "Add {name}"
@@ -36,12 +38,14 @@
         "data": {
           "ip_address": "IPv4 address",
           "password": "Password (optional)",
-          "refresh_rate": "Scan interval (seconds)"
+          "refresh_rate": "Scan interval (seconds)",
+          "web_port": "HTTP Port"
         },
         "data_description": {
           "ip_address": "Enter the IPv4 address of your device.",
           "password": "Leave blank if your device does not require authentication.",
-          "refresh_rate": "How often Home Assistant should poll the device for new data."
+          "refresh_rate": "How often Home Assistant should poll the device for new data.",
+          "web_port": "The HTTP port of the device. Default is 80."
         },
         "title": "Manual Setup"
       },
@@ -58,11 +62,13 @@
       "reconfigure": {
         "data": {
           "ip_address": "IPv4 Address",
-          "password": "Password (optional)"
+          "password": "Password (optional)",
+          "web_port": "HTTP Port"
         },
         "data_description": {
           "ip_address": "Enter a new IPv4 address of your device.",
-          "password": "Enter a new admin password of the device (Optional)."
+          "password": "Enter a new admin password of the device (Optional).",
+          "web_port": "Enter the HTTP port of the device."
         },
         "description": "Update the connection details for your device.",
         "title": "Reconfigure {name}"
@@ -71,12 +77,14 @@
         "data": {
           "ip_address": "IPv4 address",
           "password": "Password (optional)",
-          "refresh_rate": "Scan interval (seconds)"
+          "refresh_rate": "Scan interval (seconds)",
+          "web_port": "HTTP Port"
         },
         "data_description": {
           "ip_address": "Select a discovered device or choose manual entry.",
           "password": "Leave blank if your device does not require authentication.",
-          "refresh_rate": "How often Home Assistant should poll the device for new data."
+          "refresh_rate": "How often Home Assistant should poll the device for new data.",
+          "web_port": "The HTTP port of the device. Default is 80."
         },
         "title": "Add a new device"
       },

@@ -20,7 +20,7 @@ from homeassistant.core import callback
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.device_registry import format_mac
 
-from .const import DEFAULT_SCAN_INTERVAL, DOMAIN
+from .const import DEFAULT_SCAN_INTERVAL, DEFAULT_WEB_PORT, DOMAIN
 from .discovery import async_discover_papouch_devices
 from .utils import _get_device_name
 
@@ -49,14 +49,16 @@ class PapouchConfigFlow(ConfigFlow, domain=DOMAIN):
         self._discovered_ips: dict[str, str] | None = None
 
     async def _test_connection(
-        self, ip_address: str, password: str = ""
+        self, ip_address: str, password: str = "", web_port: int = DEFAULT_WEB_PORT
     ) -> tuple[dict[str, str], int | None]:
         """Test the connection and return any errors and the device mode."""
         if not re.match(r"^(?:[0-9]{1,3}\.){3}[0-9]{1,3}$", ip_address):
             return {"ip_address": "invalid_ip_format"}, None
 
         session = async_get_clientsession(self.hass)
-        client = PapouchHTTPClient(ip_address, session, password=password)
+        client = PapouchHTTPClient(
+            ip_address, session, password=password, web_port=web_port
+        )
 
         try:
             await client.fetch_info()
@@ -83,9 +85,10 @@ class PapouchConfigFlow(ConfigFlow, domain=DOMAIN):
 
         ip_address = user_input["ip_address"]
         password = str(user_input.get("password", ""))
+        web_port = int(user_input["web_port"])
 
         errors, mode_device = await self._test_connection(
-            user_input["ip_address"], password
+            user_input["ip_address"], password, web_port
         )
 
         if errors:
@@ -99,7 +102,11 @@ class PapouchConfigFlow(ConfigFlow, domain=DOMAIN):
             return {}, await self.async_step_web_mode()
 
         session = async_get_clientsession(self.hass)
-        client = PapouchHTTPClient(ip_address, session, password=password)
+
+        client = PapouchHTTPClient(
+            ip_address, session, password=password, web_port=web_port
+        )
+
         title_name = await _get_device_name(self.hass, ip_address, password)
 
         try:
@@ -121,6 +128,7 @@ class PapouchConfigFlow(ConfigFlow, domain=DOMAIN):
             "ip_address": user_input["ip_address"],
             "password": password,
             "device_name": title_name,
+            "web_port": web_port,
         }
         options = {
             "refresh_rate": user_input.get("refresh_rate", DEFAULT_SCAN_INTERVAL)
@@ -146,7 +154,10 @@ class PapouchConfigFlow(ConfigFlow, domain=DOMAIN):
             if entry.unique_id == discovered_mac:
                 if entry.data.get("ip_address") != self.discovered_ip:
                     new_name = await _get_device_name(
-                        self.hass, self.discovered_ip, entry.data.get("password", "")
+                        self.hass,
+                        self.discovered_ip,
+                        entry.data.get("password", ""),
+                        entry.data.get("web_port", DEFAULT_WEB_PORT),
                     )
                     new_title = f"{new_name} - {self.discovered_ip}"
 
@@ -214,6 +225,9 @@ class PapouchConfigFlow(ConfigFlow, domain=DOMAIN):
                 vol.Required("refresh_rate", default=DEFAULT_SCAN_INTERVAL): vol.All(
                     int, vol.Range(min=1, max=3600)
                 ),
+                vol.Optional("web_port", default=DEFAULT_WEB_PORT): vol.All(
+                    int, vol.Range(min=1, max=65536)
+                ),
                 vol.Optional("password"): str,
             }
         )
@@ -277,11 +291,19 @@ class PapouchConfigFlow(ConfigFlow, domain=DOMAIN):
             else DEFAULT_SCAN_INTERVAL
         )
 
+        default_web_port = DEFAULT_WEB_PORT
+
+        if user_input and "web_port" in user_input:
+            default_web_port = user_input["web_port"]
+
         schema = vol.Schema(
             {
                 vol.Required("ip_address"): vol.In(options),
                 vol.Required("refresh_rate", default=default_interval): vol.All(
                     int, vol.Range(min=1, max=3600)
+                ),
+                vol.Optional("web_port", default=default_web_port): vol.All(
+                    int, vol.Range(min=1, max=65536)
                 ),
                 vol.Optional("password"): str,
             }
@@ -302,6 +324,7 @@ class PapouchConfigFlow(ConfigFlow, domain=DOMAIN):
 
         default_ip = self.discovered_ip or ""
         default_interval = DEFAULT_SCAN_INTERVAL
+        default_web_port = DEFAULT_WEB_PORT
 
         if self._saved_input and "refresh_rate" in self._saved_input:
             default_interval = self._saved_input["refresh_rate"]
@@ -309,12 +332,17 @@ class PapouchConfigFlow(ConfigFlow, domain=DOMAIN):
             default_interval = user_input["refresh_rate"]
         if user_input and "ip_address" in user_input:
             default_ip = user_input["ip_address"]
+        if user_input and "web_port" in user_input:
+            default_web_port = user_input["web_port"]
 
         schema = vol.Schema(
             {
                 vol.Required("ip_address", default=default_ip): str,
                 vol.Required("refresh_rate", default=default_interval): vol.All(
                     int, vol.Range(min=1, max=3600)
+                ),
+                vol.Optional("web_port", default=default_web_port): vol.All(
+                    int, vol.Range(min=1, max=65536)
                 ),
                 vol.Optional("password"): str,
             }
@@ -342,8 +370,11 @@ class PapouchConfigFlow(ConfigFlow, domain=DOMAIN):
         session = async_get_clientsession(self.hass)
         password = self._saved_input.get("password", "")
         ip_address = self._saved_input["ip_address"]
+        web_port = self._saved_input["web_port"]
 
-        client = PapouchHTTPClient(ip_address, session, password=password)
+        client = PapouchHTTPClient(
+            ip_address, session, password=password, web_port=web_port
+        )
 
         try:
             device = await create_device(client)
@@ -353,7 +384,9 @@ class PapouchConfigFlow(ConfigFlow, domain=DOMAIN):
 
             await device.switch_to_web_mode()
 
-            title_name = await _get_device_name(self.hass, ip_address, password)
+            title_name = await _get_device_name(
+                self.hass, ip_address, password, web_port
+            )
 
             try:
                 mac_address = await client.get_device_mac()
@@ -369,6 +402,7 @@ class PapouchConfigFlow(ConfigFlow, domain=DOMAIN):
                 "ip_address": ip_address,
                 "password": password,
                 "device_name": title_name,
+                "web_port": web_port,
             }
             options = {
                 "refresh_rate": self._saved_input.get(
@@ -409,11 +443,16 @@ class PapouchConfigFlow(ConfigFlow, domain=DOMAIN):
         if user_input is not None and self._reauth_entry:
             password = user_input.get("password", "")
             ip_address = self._reauth_entry.data["ip_address"]
+            web_port = self._reauth_entry.data.get("web_port", DEFAULT_WEB_PORT)
 
-            errors, _ = await self._test_connection(ip_address, password)
+            errors, _ = await self._test_connection(ip_address, password, web_port)
 
             if not errors:
-                new_data = {**self._reauth_entry.data, "password": password}
+                new_data = {
+                    **self._reauth_entry.data,
+                    "password": password,
+                    "web_port": web_port,
+                }
                 self.hass.config_entries.async_update_entry(
                     self._reauth_entry, data=new_data
                 )
@@ -457,12 +496,17 @@ class PapouchConfigFlow(ConfigFlow, domain=DOMAIN):
 
         if user_input is not None:
             errors, _ = await self._test_connection(
-                user_input["ip_address"], user_input.get("password", "")
+                user_input["ip_address"],
+                user_input.get("password", ""),
+                user_input.get("web_port", DEFAULT_WEB_PORT),
             )
 
             if not errors:
                 new_name = await _get_device_name(
-                    self.hass, user_input["ip_address"], user_input.get("password", "")
+                    self.hass,
+                    user_input["ip_address"],
+                    user_input.get("password", ""),
+                    user_input.get("web_port", DEFAULT_WEB_PORT),
                 )
                 new_title = f"{new_name} - {user_input['ip_address']}"
 
@@ -472,16 +516,24 @@ class PapouchConfigFlow(ConfigFlow, domain=DOMAIN):
                         **entry.data,
                         "ip_address": user_input["ip_address"],
                         "password": user_input.get("password", ""),
+                        "web_port": user_input.get("web_port", DEFAULT_WEB_PORT),
                     },
                     title=new_title,
                 )
                 await self.hass.config_entries.async_reload(entry.entry_id)
                 return self.async_abort(reason="reconfigure_successful")
 
+        default_web_port = entry.data.get("web_port", DEFAULT_WEB_PORT)
+        if user_input and "web_port" in user_input:
+            default_web_port = user_input["web_port"]
+
         schema = vol.Schema(
             {
                 vol.Required("ip_address", default=entry.data["ip_address"]): str,
                 vol.Optional("password", default=entry.data.get("password", "")): str,
+                vol.Optional("web_port", default=default_web_port): vol.All(
+                    int, vol.Range(min=1, max=65536)
+                ),
             }
         )
 
