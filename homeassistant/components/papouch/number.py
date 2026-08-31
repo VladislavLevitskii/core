@@ -1,23 +1,66 @@
 """Number platform for the Papouch integration."""
 
-from typing import TYPE_CHECKING, Any, override
+from dataclasses import dataclass
+import logging
+from typing import cast, override
 
 import aiopapouch.exceptions as aiopapouch_exceptions
 
-from homeassistant.components.number import NumberEntity, NumberMode
+from homeassistant.components.number import (
+    NumberEntity,
+    NumberEntityDescription,
+    NumberMode,
+)
+from homeassistant.core import HomeAssistant
 from homeassistant.helpers.device_registry import format_mac
+from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 
+from . import PapouchConfigEntry
+from .coordinator import PapouchDataUpdateCoordinator
 from .entity import PapouchEntity
 from .exceptions import PapouchAuthError, PapouchCommandError, PapouchConnectionError
 
-if TYPE_CHECKING:
-    from homeassistant.core import HomeAssistant
-    from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
-
-    from . import PapouchConfigEntry
-    from .coordinator import PapouchDataUpdateCoordinator
-
 PARALLEL_UPDATES = 0
+_LOGGER = logging.getLogger(__name__)
+
+
+@dataclass(frozen=True, kw_only=True)
+class PapouchNumberEntityDescription(NumberEntityDescription):
+    """Description class of the Papouch number entity."""
+
+    category: str = ""
+    item_id: str = ""
+    translation_placeholders: dict[str, str] | None = None
+    native_min_value: float = 0
+    native_max_value: float = 100
+    native_step: float = 1
+    mode: NumberMode = NumberMode.BOX
+
+
+NUMBER_TYPES = (
+    PapouchNumberEntityDescription(
+        key="decrease_counter", translation_key="decrease_counter"
+    ),
+    PapouchNumberEntityDescription(
+        key="output_off_duration", translation_key="output_off_duration"
+    ),
+    PapouchNumberEntityDescription(
+        key="output_on_duration", translation_key="output_on_duration"
+    ),
+    PapouchNumberEntityDescription(key="set_counter", translation_key="set_counter"),
+)
+
+NUMBER_MAP = {desc.key: desc for desc in NUMBER_TYPES}
+
+
+def _get_translation_config(
+    category: str, name_val: str | None
+) -> tuple[str | None, dict[str, str] | None]:
+    if name_val is not None:
+        return f"{category}_custom", {"name": name_val}
+
+    base_desc = NUMBER_MAP.get(category)
+    return base_desc.translation_key if base_desc else None, None
 
 
 async def async_setup_entry(
@@ -28,61 +71,75 @@ async def async_setup_entry(
     """Set up the number platform."""
     coordinator = entry.runtime_data
     device = coordinator.device
+    entities = []
 
-    entities = [
-        PapouchNumber(coordinator, entry, number_data)
-        for number_data in device.get_supported_numbers()
-    ]
+    for number_data in device.get_supported_numbers():
+        category = cast(str, number_data["category"])
+        base_desc = NUMBER_MAP.get(category)
+
+        if not base_desc:
+            _LOGGER.error("Unknown number category '%s'. Skipping", category)
+            continue
+
+        item_id = str(number_data["item_id"])
+        name_val = number_data.get("name")
+        translation_key, placeholders = _get_translation_config(category, name_val)
+
+        description = PapouchNumberEntityDescription(
+            key=f"{category}_{item_id}",
+            category=category,
+            item_id=item_id,
+            native_min_value=number_data.get("min_value", 0),
+            native_max_value=number_data.get("max_value", 100),
+            native_step=number_data.get("step", 1),
+            mode=NumberMode(number_data.get("mode", "box")),
+            translation_key=translation_key,
+            translation_placeholders=placeholders,
+        )
+        entities.append(PapouchNumber(coordinator, description))
+
     async_add_entities(entities)
 
 
 class PapouchNumber(PapouchEntity, NumberEntity):
     """Representation of a generic Papouch number entity."""
 
+    entity_description: PapouchNumberEntityDescription
+
     def __init__(
         self,
         coordinator: PapouchDataUpdateCoordinator,
-        entry: PapouchConfigEntry,
-        number_data: dict[str, Any],
+        description: PapouchNumberEntityDescription,
     ) -> None:
         """Initialize the number entity."""
-        super().__init__(coordinator, entry)
-
+        super().__init__(coordinator)
+        self.entity_description = description
         mac = format_mac(coordinator.device.mac_address)
+        self._attr_unique_id = f"{mac}_{description.category}_{description.item_id}"
 
-        self.item_id = number_data["item_id"]
-        self.category = number_data["category"]
+        if description.translation_placeholders:
+            self._attr_translation_placeholders = description.translation_placeholders
 
-        self._attr_unique_id = f"{mac}_{self.category}_{self.item_id}"
-
-        if number_data.get("use_custom_name", False):
-            self._attr_name = number_data["name"]
-        else:
-            self._attr_translation_key = number_data["translation"]
-            if "placeholder" in number_data:
-                self._attr_translation_placeholders = number_data["placeholder"]
-
-        self._attr_native_min_value = number_data.get("min_value", 0)
-        self._attr_native_max_value = number_data.get("max_value", 100)
-        self._attr_native_step = number_data.get("step", 1)
-
-        self._attr_mode = NumberMode(number_data.get("mode", "box"))
-
+        self._attr_native_min_value = description.native_min_value
+        self._attr_native_max_value = description.native_max_value
+        self._attr_native_step = description.native_step
+        self._attr_mode = description.mode
         self._current_value: float = 1
 
     @property
     @override
     def native_value(self) -> float:
-        """Return the local value, NOT the real hardware counter."""
+        """Return the local value of the number entity."""
         return self._current_value
 
     @override
     async def async_set_native_value(self, value: float) -> None:
-        """Send the command and update the UI."""
+        """Send the update command to the device."""
         try:
             await self.coordinator.device.set_number_value(
-                self.category, self.item_id, value
+                self.entity_description.category, self.entity_description.item_id, value
             )
+            await self.coordinator.async_request_refresh()
         except aiopapouch_exceptions.DeviceAuthError as err:
             raise PapouchAuthError(
                 translation_placeholders={
@@ -100,12 +157,10 @@ class PapouchNumber(PapouchEntity, NumberEntity):
         except aiopapouch_exceptions.DeviceError as err:
             raise PapouchCommandError(
                 translation_placeholders={
-                    "cmd": f"set_{self.category}",
+                    "cmd": f"set_{self.entity_description.category}",
                     "name": self.coordinator.device.name,
                 }
             ) from err
 
         self._current_value = value
         self.async_write_ha_state()
-
-        await self.coordinator.async_request_refresh()

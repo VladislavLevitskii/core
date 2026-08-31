@@ -1,7 +1,7 @@
 {
   "entity": {
     "binary_sensor": {
-      "input_placeholder": {
+      "input_custom": {
         "default": "mdi:eye",
         "state": {
           "off": "mdi:eye-off",
@@ -22,84 +22,87 @@
       "set_sensor": {
         "default": "mdi:gesture-tap"
       },
-      "set_sensor_placeholder": {
+      "set_sensor_custom": {
         "default": "mdi:gesture-tap"
       }
     },
     "number": {
-      "decrease_counter_placeholder": {
+      "decrease_counter_custom": {
         "default": "mdi:arrow-down-bold-box"
       },
-      "output_off_duration_placeholder": {
+      "output_off_duration_custom": {
         "default": "mdi:flash-off"
       },
-      "output_on_duration_placeholder": {
+      "output_on_duration_custom": {
         "default": "mdi:flash"
       },
-      "set_counter_placeholder": {
+      "set_counter_custom": {
         "default": "mdi:pencil-box-multiple-outline"
       }
     },
     "select": {
-      "counter_mode": {
+      "counter_mode_custom": {
         "default": "mdi:format-list-bulleted"
       },
       "sensor_type": {
         "default": "mdi:format-list-bulleted"
       },
-      "sensor_type_meteo_ab": {
+      "sensor_type_custom": {
         "default": "mdi:format-list-bulleted"
       },
-      "sensor_type_meteo_c": {
+      "sensor_type_meteo_ab_custom": {
+        "default": "mdi:format-list-bulleted"
+      },
+      "sensor_type_meteo_c_custom": {
         "default": "mdi:format-list-bulleted"
       }
     },
     "sensor": {
-      "sensor_batt_placeholder": {
+      "batt_custom": {
         "default": "mdi:battery"
       },
-      "sensor_co2_placeholder": {
+      "co2_custom": {
         "default": "mdi:molecule-co2"
       },
-      "sensor_counter_placeholder": {
+      "counter_custom": {
         "default": "mdi:square-wave"
       },
-      "sensor_dew_point": {
+      "dew_point": {
         "default": "mdi:thermometer-water"
       },
-      "sensor_dew_point_placeholder": {
+      "dew_point_custom": {
         "default": "mdi:thermometer-water"
       },
-      "sensor_humidity": {
+      "humidity_custom": {
         "default": "mdi:water-percent"
       },
-      "sensor_humidity_placeholder": {
-        "default": "mdi:water-percent"
-      },
-      "sensor_pressure_placeholder": {
-        "default": "mdi:gauge"
-      },
-      "sensor_rain_placeholder": {
+      "precipitation_intensity_custom": {
         "default": "mdi:weather-rainy"
       },
-      "sensor_rsii_placeholder": {
+      "pressure_custom": {
+        "default": "mdi:gauge"
+      },
+      "rain_custom": {
+        "default": "mdi:weather-rainy"
+      },
+      "rssi_custom": {
         "default": "mdi:signal"
       },
-      "sensor_temperature": {
+      "temperature_custom": {
         "default": "mdi:thermometer"
       },
-      "sensor_temperature_placeholder": {
-        "default": "mdi:thermometer"
-      },
-      "sensor_wind_direction_placeholder": {
+      "wind_direction_custom": {
         "default": "mdi:compass"
       },
-      "sensor_wind_speed_placeholder": {
+      "wind_direction_text_custom": {
+        "default": "mdi:compass"
+      },
+      "wind_speed_custom": {
         "default": "mdi:weather-windy"
       }
     },
     "switch": {
-      "output_placeholder": {
+      "output_custom": {
         "default": "mdi:toggle-switch",
         "state": {
           "off": "mdi:toggle-switch-off",

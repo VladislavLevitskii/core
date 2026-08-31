@@ -1,23 +1,59 @@
 """Button platform for the Papouch integration."""
 
-from typing import TYPE_CHECKING, Any, override
+from dataclasses import dataclass
+import logging
+from typing import cast, override
 
 import aiopapouch.exceptions as aiopapouch_exceptions
 
-from homeassistant.components.button import ButtonEntity
+from homeassistant.components.button import ButtonEntity, ButtonEntityDescription
+from homeassistant.core import HomeAssistant
 from homeassistant.helpers.device_registry import format_mac
+from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 
+from . import PapouchConfigEntry
+from .coordinator import PapouchDataUpdateCoordinator
 from .entity import PapouchEntity
 from .exceptions import PapouchAuthError, PapouchCommandError, PapouchConnectionError
 
 PARALLEL_UPDATES = 0
+_LOGGER = logging.getLogger(__name__)
 
-if TYPE_CHECKING:
-    from homeassistant.core import HomeAssistant
-    from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 
-    from . import PapouchConfigEntry
-    from .coordinator import PapouchDataUpdateCoordinator
+@dataclass(frozen=True, kw_only=True)
+class PapouchButtonEntityDescription(ButtonEntityDescription):
+    """Description class of the Papouch button entity."""
+
+    cmd_type: str = ""
+    translation_placeholders: dict[str, str] | None = None
+
+
+BUTTON_TYPES = (
+    PapouchButtonEntityDescription(
+        key="connect_all_coils", translation_key="connect_all_coils"
+    ),
+    PapouchButtonEntityDescription(
+        key="disconnect_all_coils", translation_key="disconnect_all_coils"
+    ),
+    PapouchButtonEntityDescription(
+        key="reset_all_counters", translation_key="reset_all_counters"
+    ),
+    PapouchButtonEntityDescription(key="set_sensor", translation_key="set_sensor"),
+)
+
+BUTTON_MAP = {desc.key: desc for desc in BUTTON_TYPES}
+
+
+def _get_translation_config(
+    cmd: str, name_val: str | None
+) -> tuple[str | None, dict[str, str] | None]:
+    if cmd.startswith("set_sensor_"):
+        if name_val is not None:
+            return "set_sensor_custom", {"name": name_val}
+        return "set_sensor", None
+
+    base_desc = BUTTON_MAP.get(cmd)
+    return base_desc.translation_key if base_desc else None, None
 
 
 async def async_setup_entry(
@@ -28,11 +64,29 @@ async def async_setup_entry(
     """Set up the button platform."""
     coordinator = entry.runtime_data
     device = coordinator.device
+    entities = []
 
-    entities = [
-        PapouchCommandButton(coordinator, entry, btn_data)
-        for btn_data in device.get_supported_buttons()
-    ]
+    for btn_data in device.get_supported_buttons():
+        cmd = cast(str, btn_data["cmd"])
+
+        is_sensor_btn = cmd.startswith("set_sensor_")
+        map_key = "set_sensor" if is_sensor_btn else cmd
+        base_desc = BUTTON_MAP.get(map_key)
+
+        if not base_desc:
+            _LOGGER.error("Unknown button command '%s'. Skipping", cmd)
+            continue
+
+        name_val = btn_data.get("name")
+        translation_key, placeholders = _get_translation_config(cmd, name_val)
+
+        description = PapouchButtonEntityDescription(
+            key=cmd,
+            cmd_type=cmd,
+            translation_key=translation_key,
+            translation_placeholders=placeholders,
+        )
+        entities.append(PapouchCommandButton(coordinator, description))
 
     async_add_entities(entities)
 
@@ -40,35 +94,30 @@ async def async_setup_entry(
 class PapouchCommandButton(PapouchEntity, ButtonEntity):
     """Representation of a generic Papouch button entity."""
 
+    entity_description: PapouchButtonEntityDescription
+
     def __init__(
         self,
         coordinator: PapouchDataUpdateCoordinator,
-        entry: PapouchConfigEntry,
-        btn_data: dict[str, Any],
+        description: PapouchButtonEntityDescription,
     ) -> None:
         """Initialize the button."""
-        super().__init__(coordinator, entry)
-
+        super().__init__(coordinator)
+        self.entity_description = description
         mac = format_mac(coordinator.device.mac_address)
+        self._attr_unique_id = f"{mac}_btn_{description.cmd_type}"
 
-        self.cmd_type = btn_data["cmd"]
-
-        self._attr_unique_id = f"{mac}_btn_{self.cmd_type}"
-
-        if btn_data.get("use_custom_name", False):
-            self._attr_name = btn_data["name"]
-        else:
-            self._attr_translation_key = btn_data["translation"]
-            if "placeholder" in btn_data:
-                self._attr_translation_placeholders = btn_data["placeholder"]
+        if description.translation_placeholders:
+            self._attr_translation_placeholders = description.translation_placeholders
 
     @override
     async def async_press(self) -> None:
-        """Execute the command."""
+        """Execute the command associated with the button."""
         try:
-            await self.coordinator.device.execute_button_command(self.cmd_type)
-            self.coordinator.async_set_updated_data(self.coordinator.data)
-
+            await self.coordinator.device.execute_button_command(
+                self.entity_description.cmd_type
+            )
+            await self.coordinator.async_request_refresh()
         except aiopapouch_exceptions.DeviceAuthError as err:
             raise PapouchAuthError(
                 translation_placeholders={
@@ -76,7 +125,6 @@ class PapouchCommandButton(PapouchEntity, ButtonEntity):
                     "location": self.coordinator.device.location,
                 }
             ) from err
-
         except aiopapouch_exceptions.DeviceConnectionError as err:
             raise PapouchConnectionError(
                 translation_placeholders={
@@ -84,11 +132,10 @@ class PapouchCommandButton(PapouchEntity, ButtonEntity):
                     "location": self.coordinator.device.location,
                 }
             ) from err
-
         except aiopapouch_exceptions.DeviceError as err:
             raise PapouchCommandError(
                 translation_placeholders={
-                    "cmd": self.cmd_type,
+                    "cmd": self.entity_description.cmd_type,
                     "name": self.coordinator.device.name,
                 }
             ) from err

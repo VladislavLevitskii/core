@@ -1,23 +1,56 @@
 """Select platform for the Papouch integration."""
 
-from typing import TYPE_CHECKING, Any, override
+from dataclasses import dataclass
+import logging
+from typing import cast, override
 
 import aiopapouch.exceptions as aiopapouch_exceptions
 
-from homeassistant.components.select import SelectEntity
+from homeassistant.components.select import SelectEntity, SelectEntityDescription
+from homeassistant.core import HomeAssistant
 from homeassistant.helpers.device_registry import format_mac
+from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 
+from . import PapouchConfigEntry
+from .coordinator import PapouchDataUpdateCoordinator
 from .entity import PapouchEntity
 from .exceptions import PapouchAuthError, PapouchCommandError, PapouchConnectionError
 
-if TYPE_CHECKING:
-    from homeassistant.core import HomeAssistant
-    from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
-
-    from . import PapouchConfigEntry
-    from .coordinator import PapouchDataUpdateCoordinator
-
 PARALLEL_UPDATES = 0
+_LOGGER = logging.getLogger(__name__)
+
+
+@dataclass(frozen=True, kw_only=True)
+class PapouchSelectEntityDescription(SelectEntityDescription):
+    """Description class of the Papouch select entity."""
+
+    category: str = ""
+    item_id: str = ""
+    translation_placeholders: dict[str, str] | None = None
+
+
+SELECT_TYPES = (
+    PapouchSelectEntityDescription(key="counter_mode", translation_key="counter_mode"),
+    PapouchSelectEntityDescription(key="sensor_type", translation_key="sensor_type"),
+    PapouchSelectEntityDescription(
+        key="sensor_type_meteo_ab", translation_key="sensor_type_meteo_ab"
+    ),
+    PapouchSelectEntityDescription(
+        key="sensor_type_meteo_c", translation_key="sensor_type_meteo_c"
+    ),
+)
+
+SELECT_MAP = {desc.key: desc for desc in SELECT_TYPES}
+
+
+def _get_translation_config(
+    category: str, name_val: str | None
+) -> tuple[str | None, dict[str, str] | None]:
+    if name_val is not None:
+        return f"{category}_custom", {"name": name_val}
+
+    base_desc = SELECT_MAP.get(category)
+    return base_desc.translation_key if base_desc else None, None
 
 
 async def async_setup_entry(
@@ -25,14 +58,32 @@ async def async_setup_entry(
     entry: PapouchConfigEntry,
     async_add_entities: AddConfigEntryEntitiesCallback,
 ) -> None:
-    """Set up the Papouch select platform."""
+    """Set up the select platform."""
     coordinator = entry.runtime_data
     device = coordinator.device
-
     entities = []
 
     for select_data in device.get_supported_selects():
-        entities.append(PapouchSelectEntity(coordinator, entry, select_data))  # noqa: PERF401
+        category = cast(str, select_data["category"])
+        base_desc = SELECT_MAP.get(category)
+
+        if not base_desc:
+            _LOGGER.error("Unknown select category '%s'. Skipping", category)
+            continue
+
+        item_id = str(select_data["item_id"])
+        name_val = select_data.get("name")
+        translation_key, placeholders = _get_translation_config(category, name_val)
+
+        description = PapouchSelectEntityDescription(
+            key=f"{category}_{item_id}",
+            category=category,
+            item_id=item_id,
+            options=select_data.get("options", []),
+            translation_key=translation_key,
+            translation_placeholders=placeholders,
+        )
+        entities.append(PapouchSelectEntity(coordinator, description))
 
     async_add_entities(entities)
 
@@ -40,44 +91,41 @@ async def async_setup_entry(
 class PapouchSelectEntity(PapouchEntity, SelectEntity):
     """Representation of a unified Papouch select entity."""
 
+    entity_description: PapouchSelectEntityDescription
+
     def __init__(
         self,
         coordinator: PapouchDataUpdateCoordinator,
-        entry: PapouchConfigEntry,
-        select_data: dict[str, Any],
+        description: PapouchSelectEntityDescription,
     ) -> None:
         """Initialize the select entity."""
-        super().__init__(coordinator, entry)
-
+        super().__init__(coordinator)
+        self.entity_description = description
         mac = format_mac(coordinator.device.mac_address)
+        self._attr_unique_id = f"{mac}_{description.category}_{description.item_id}"
 
-        self.item_id = select_data["item_id"]
-        self.category = select_data["category"]
-
-        self._attr_unique_id = f"{mac}_{self.category}_{self.item_id}"
-
-        if select_data.get("use_custom_name", False):
-            self._attr_name = select_data["name"]
-        else:
-            self._attr_translation_key = select_data["translation"]
-            if "placeholder" in select_data:
-                self._attr_translation_placeholders = select_data["placeholder"]
-
-        self._attr_options = select_data["options"]
+        if description.translation_placeholders:
+            self._attr_translation_placeholders = description.translation_placeholders
 
     @property
     @override
     def current_option(self) -> str | None:
         """Return the currently selected option."""
-        return self.coordinator.device.get_select_option(self.category, self.item_id)
+        return self.coordinator.device.get_select_option(
+            self.entity_description.category, self.entity_description.item_id
+        )
 
     @override
     async def async_select_option(self, option: str) -> None:
         """Change the selected option on the device."""
+
         try:
             await self.coordinator.device.set_select_option(
-                self.category, self.item_id, option
+                self.entity_description.category,
+                self.entity_description.item_id,
+                option,
             )
+            await self.coordinator.async_request_refresh()
         except aiopapouch_exceptions.DeviceAuthError as err:
             raise PapouchAuthError(
                 translation_placeholders={
@@ -95,9 +143,7 @@ class PapouchSelectEntity(PapouchEntity, SelectEntity):
         except aiopapouch_exceptions.DeviceError as err:
             raise PapouchCommandError(
                 translation_placeholders={
-                    "cmd": f"select_{self.category}",
+                    "cmd": f"select_{self.entity_description.category}",
                     "name": self.coordinator.device.name,
                 }
             ) from err
-
-        self.coordinator.async_set_updated_data(self.coordinator.data)

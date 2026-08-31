@@ -100,8 +100,8 @@
   },
   "entity": {
     "binary_sensor": {
-      "input_placeholder": {
-        "name": "Input {placeholder}"
+      "input_custom": {
+        "name": "Input {name}"
       }
     },
     "button": {
@@ -117,27 +117,27 @@
       "set_sensor": {
         "name": "Set sensor automatically"
       },
-      "set_sensor_placeholder": {
-        "name": "Set {placeholder} automatically"
+      "set_sensor_custom": {
+        "name": "Set {name} automatically"
       }
     },
     "number": {
-      "decrease_counter_placeholder": {
-        "name": "Decrease counter {placeholder} by:"
+      "decrease_counter_custom": {
+        "name": "Decrease counter {name} by:"
       },
-      "output_off_duration_placeholder": {
-        "name": "Output {placeholder} off for duration (s)"
+      "output_off_duration_custom": {
+        "name": "Output {name} off for duration (s)"
       },
-      "output_on_duration_placeholder": {
-        "name": "Output {placeholder} on for duration (s)"
+      "output_on_duration_custom": {
+        "name": "Output {name} on for duration (s)"
       },
-      "set_counter_placeholder": {
-        "name": "Set counter {placeholder} on:"
+      "set_counter_custom": {
+        "name": "Set counter {name} on:"
       }
     },
     "select": {
-      "counter_mode": {
-        "name": "Counter {placeholder} mode",
+      "counter_mode_custom": {
+        "name": "Counter {name} mode",
         "state": {
           "counts_ascending_and_descending_edges": "Counts ascending and descending edges",
           "counts_ascending_edges": "Counts ascending edges",
@@ -146,7 +146,7 @@
         }
       },
       "sensor_type": {
-        "name": "{placeholder} type",
+        "name": "Sensor type",
         "state": {
           "temperature_ds": "Temperature (DS)",
           "temperature_humidity_th15": "Temperature / Humidity (TH15)",
@@ -155,8 +155,18 @@
           "unused": "Unused"
         }
       },
-      "sensor_type_meteo_ab": {
-        "name": "{placeholder} type",
+      "sensor_type_custom": {
+        "name": "{name} type",
+        "state": {
+          "temperature_ds": "Temperature (DS)",
+          "temperature_humidity_th15": "Temperature / Humidity (TH15)",
+          "temperature_humidity_th3x": "Temperature / Humidity (TH3x)",
+          "temperature_tmp": "Temperature (TMP)",
+          "unused": "Unused"
+        }
+      },
+      "sensor_type_meteo_ab_custom": {
+        "name": "{name} type",
         "state": {
           "atmospheric_pressure": "Atmospheric pressure",
           "co2_concentration_sd4x": "CO2 concentration (SCD4x)",
@@ -168,8 +178,8 @@
           "unused": "Unused"
         }
       },
-      "sensor_type_meteo_c": {
-        "name": "{placeholder} type",
+      "sensor_type_meteo_c_custom": {
+        "name": "{name} type",
         "state": {
           "davis": "Davis",
           "unused": "Unused"
@@ -177,52 +187,52 @@
       }
     },
     "sensor": {
-      "sensor_batt_placeholder": {
-        "name": "{placeholder} Battery"
+      "batt_custom": {
+        "name": "{name} battery"
       },
-      "sensor_co2_placeholder": {
-        "name": "{placeholder} CO2"
+      "co2_custom": {
+        "name": "{name} CO2"
       },
-      "sensor_counter_placeholder": {
-        "name": "Input {placeholder} Count"
+      "counter_custom": {
+        "name": "Counter {name}"
       },
-      "sensor_dew_point": {
-        "name": "Dew Point"
+      "dew_point": {
+        "name": "Dew point"
       },
-      "sensor_dew_point_placeholder": {
-        "name": "{placeholder} Dew Point"
+      "dew_point_custom": {
+        "name": "{name} dew point"
       },
-      "sensor_humidity": {
-        "name": "Humidity"
+      "humidity_custom": {
+        "name": "{name} humidity"
       },
-      "sensor_humidity_placeholder": {
-        "name": "{placeholder} Humidity"
+      "precipitation_intensity_custom": {
+        "name": "{name} precipitation intensity"
       },
-      "sensor_pressure_placeholder": {
-        "name": "{placeholder} Pressure"
+      "pressure_custom": {
+        "name": "{name} pressure"
       },
-      "sensor_rain_placeholder": {
-        "name": "{placeholder} Rainfall"
+      "rain_custom": {
+        "name": "{name} rainfall"
       },
-      "sensor_rsii_placeholder": {
-        "name": "{placeholder} Signal Strength"
+      "rssi_custom": {
+        "name": "{name} signal strength"
       },
-      "sensor_temperature": {
-        "name": "Temperature"
+      "temperature_custom": {
+        "name": "{name} temperature"
       },
-      "sensor_temperature_placeholder": {
-        "name": "{placeholder} Temperature"
+      "wind_direction_custom": {
+        "name": "{name} wind direction"
       },
-      "sensor_wind_direction_placeholder": {
-        "name": "{placeholder} Wind Direction"
+      "wind_direction_text_custom": {
+        "name": "{name} wind direction"
       },
-      "sensor_wind_speed_placeholder": {
-        "name": "{placeholder} Wind Speed"
+      "wind_speed_custom": {
+        "name": "{name} wind speed"
       }
     },
     "switch": {
-      "output_placeholder": {
-        "name": "Output {placeholder}"
+      "output_custom": {
+        "name": "Output {name}"
       }
     }
   },
