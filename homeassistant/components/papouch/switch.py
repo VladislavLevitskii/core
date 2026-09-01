@@ -4,15 +4,15 @@ from dataclasses import dataclass
 import logging
 from typing import Any, override
 
+from aiopapouch import PapouchDevice
 import aiopapouch.exceptions as aiopapouch_exceptions
 
 from homeassistant.components.switch import SwitchEntity, SwitchEntityDescription
 from homeassistant.core import HomeAssistant
-from homeassistant.helpers.device_registry import format_mac
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 
 from . import PapouchConfigEntry
-from .coordinator import PapouchDataUpdateCoordinator
+from .coordinator import PapouchBaseCoordinator
 from .entity import PapouchEntity
 from .exceptions import PapouchAuthError, PapouchCommandError, PapouchConnectionError
 
@@ -50,28 +50,28 @@ async def async_setup_entry(
 ) -> None:
     """Set up the switch platform."""
     coordinator = entry.runtime_data
-    device = coordinator.device
     entities = []
 
-    for switch_data in device.get_supported_switches():
-        data_type = str(switch_data.get("type", "output"))
-        base_desc = SWITCH_MAP.get(data_type)
+    for device in coordinator.get_devices():
+        for switch_data in device.get_supported_switches():
+            data_type = str(switch_data.get("type", "output"))
+            base_desc = SWITCH_MAP.get(data_type)
 
-        if not base_desc:
-            _LOGGER.error("Unknown switch type '%s'. Skipping", data_type)
-            continue
+            if not base_desc:
+                _LOGGER.error("Unknown switch type '%s'. Skipping", data_type)
+                continue
 
-        item_id = str(switch_data["item_id"])
-        name_val = switch_data.get("name")
-        translation_key, placeholders = _get_translation_config(data_type, name_val)
+            item_id = str(switch_data["item_id"])
+            name_val = switch_data.get("name")
+            translation_key, placeholders = _get_translation_config(data_type, name_val)
 
-        description = PapouchSwitchEntityDescription(
-            key=item_id,
-            item_id=item_id,
-            translation_key=translation_key,
-            translation_placeholders=placeholders,
-        )
-        entities.append(PapouchSwitch(coordinator, description))
+            description = PapouchSwitchEntityDescription(
+                key=item_id,
+                item_id=item_id,
+                translation_key=translation_key,
+                translation_placeholders=placeholders,
+            )
+            entities.append(PapouchSwitch(coordinator, device, description))
 
     async_add_entities(entities)
 
@@ -83,14 +83,14 @@ class PapouchSwitch(PapouchEntity, SwitchEntity):
 
     def __init__(
         self,
-        coordinator: PapouchDataUpdateCoordinator,
+        coordinator: PapouchBaseCoordinator,
+        device: PapouchDevice,
         description: PapouchSwitchEntityDescription,
     ) -> None:
         """Initialize the switch."""
-        super().__init__(coordinator)
+        super().__init__(coordinator, device)
         self.entity_description = description
-        mac = format_mac(coordinator.device.mac_address)
-        self._attr_unique_id = f"{mac}_{description.item_id}"
+        self._attr_unique_id = f"{self.device.identifier}_{description.item_id}"
 
         if description.translation_placeholders:
             self._attr_translation_placeholders = description.translation_placeholders
@@ -108,28 +108,26 @@ class PapouchSwitch(PapouchEntity, SwitchEntity):
     async def async_turn_on(self, **kwargs: Any) -> None:
         """Turn the switch on."""
         try:
-            await self.coordinator.device.turn_on_switch(
-                self.entity_description.item_id
-            )
+            await self.device.turn_on_switch(self.entity_description.item_id)
         except aiopapouch_exceptions.DeviceAuthError as err:
             raise PapouchAuthError(
                 translation_placeholders={
-                    "name": self.coordinator.device.name,
-                    "location": self.coordinator.device.location,
+                    "name": self.device.name,
+                    "location": self.device.location,
                 }
             ) from err
         except aiopapouch_exceptions.DeviceConnectionError as err:
             raise PapouchConnectionError(
                 translation_placeholders={
-                    "name": self.coordinator.device.name,
-                    "location": self.coordinator.device.location,
+                    "name": self.device.name,
+                    "location": self.device.location,
                 }
             ) from err
         except aiopapouch_exceptions.DeviceError as err:
             raise PapouchCommandError(
                 translation_placeholders={
                     "cmd": f"turn_on_switch_{self.entity_description.item_id}",
-                    "name": self.coordinator.device.name,
+                    "name": self.device.name,
                 }
             ) from err
 
@@ -142,28 +140,26 @@ class PapouchSwitch(PapouchEntity, SwitchEntity):
     async def async_turn_off(self, **kwargs: Any) -> None:
         """Turn the switch off."""
         try:
-            await self.coordinator.device.turn_off_switch(
-                self.entity_description.item_id
-            )
+            await self.device.turn_off_switch(self.entity_description.item_id)
         except aiopapouch_exceptions.DeviceAuthError as err:
             raise PapouchAuthError(
                 translation_placeholders={
-                    "name": self.coordinator.device.name,
-                    "location": self.coordinator.device.location,
+                    "name": self.device.name,
+                    "location": self.device.location,
                 }
             ) from err
         except aiopapouch_exceptions.DeviceConnectionError as err:
             raise PapouchConnectionError(
                 translation_placeholders={
-                    "name": self.coordinator.device.name,
-                    "location": self.coordinator.device.location,
+                    "name": self.device.name,
+                    "location": self.device.location,
                 }
             ) from err
         except aiopapouch_exceptions.DeviceError as err:
             raise PapouchCommandError(
                 translation_placeholders={
                     "cmd": f"turn_off_switch_{self.entity_description.item_id}",
-                    "name": self.coordinator.device.name,
+                    "name": self.device.name,
                 }
             ) from err
 

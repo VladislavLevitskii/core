@@ -16,7 +16,10 @@
     "-e",
     "GIT_EDITOR=code --wait",
     "--security-opt",
-    "label=disable"
+    "label=disable",
+    "--device",
+    "/dev/ttyUSB0:/dev/ttyUSB0",
+    "--net=host"
   ],
   "customizations": {
     "vscode": {

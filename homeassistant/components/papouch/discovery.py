@@ -59,7 +59,7 @@ async def _get_device_info(
         _LOGGER.debug("Could not get device info from %s: %s", ip_address, err)
         return None
     else:
-        if not is_device_supported(device_name):
+        if not is_device_supported(device_name, "network"):
             return None
 
         if device_name is None or device_location is None:

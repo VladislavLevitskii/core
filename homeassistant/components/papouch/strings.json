@@ -49,6 +49,21 @@
         },
         "title": "Manual Setup"
       },
+      "network": {
+        "data": {
+          "ip_address": "IPv4 address",
+          "password": "Password (optional)",
+          "refresh_rate": "Scan interval (seconds)",
+          "web_port": "HTTP Port"
+        },
+        "data_description": {
+          "ip_address": "Select a discovered device or choose manual entry.",
+          "password": "Leave blank if your device does not require authentication.",
+          "refresh_rate": "How often Home Assistant should poll the device for new data.",
+          "web_port": "The HTTP port of the device. Default is 80."
+        },
+        "title": "Add a new network device"
+      },
       "reauth_confirm": {
         "data": {
           "password": "New Password"
@@ -73,20 +88,40 @@
         "description": "Update the connection details for your device.",
         "title": "Reconfigure {name}"
       },
-      "user": {
+      "serial": {
         "data": {
-          "ip_address": "IPv4 address",
-          "password": "Password (optional)",
-          "refresh_rate": "Scan interval (seconds)",
-          "web_port": "HTTP Port"
+          "baudrate": "Baudrate",
+          "port": "Port",
+          "refresh_rate": "Scan interval (seconds)"
         },
         "data_description": {
-          "ip_address": "Select a discovered device or choose manual entry.",
-          "password": "Leave blank if your device does not require authentication.",
-          "refresh_rate": "How often Home Assistant should poll the device for new data.",
-          "web_port": "The HTTP port of the device. Default is 80."
+          "baudrate": "Communication speed (baudrate) for the serial port.",
+          "port": "Select the serial port.",
+          "refresh_rate": "How often Home Assistant should poll the device for new data."
         },
-        "title": "Add a new device"
+        "title": "Add a new serial hub"
+      },
+      "serial_manual": {
+        "data": {
+          "baudrate": "Baudrate",
+          "port": "Port path",
+          "refresh_rate": "Scan interval (seconds)"
+        },
+        "data_description": {
+          "baudrate": "Communication speed (baudrate) for the serial port.",
+          "port": "Serial port path (e.g. /dev/ttyUSB0 or COM1).",
+          "refresh_rate": "How often Home Assistant should poll the device for new data."
+        },
+        "title": "Add a manual serial hub"
+      },
+      "user": {
+        "data": {
+          "connection_type": "Connection Type"
+        },
+        "data_description": {
+          "connection_type": "Choose whether you want to connect a network or create a new serial hub."
+        },
+        "title": "Select Connection Type"
       },
       "web_mode": {
         "description": "The device is currently not in web mode. Do you want to switch it to web mode?",
@@ -245,6 +280,9 @@
     },
     "invalid_auth": {
       "message": "Invalid password of device {name} ({location})"
+    },
+    "unable_open_port": {
+      "message": "Unable to open {port}."
     },
     "unsupported_device": {
       "message": "Device {name} ({location}) is unsupported."

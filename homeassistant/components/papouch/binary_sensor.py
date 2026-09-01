@@ -4,16 +4,17 @@ from dataclasses import dataclass
 import logging
 from typing import cast, override
 
+from aiopapouch import PapouchDevice
+
 from homeassistant.components.binary_sensor import (
     BinarySensorEntity,
     BinarySensorEntityDescription,
 )
 from homeassistant.core import HomeAssistant
-from homeassistant.helpers.device_registry import format_mac
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 
 from . import PapouchConfigEntry
-from .coordinator import PapouchDataUpdateCoordinator
+from .coordinator import PapouchBaseCoordinator
 from .entity import PapouchEntity
 
 PARALLEL_UPDATES = 0
@@ -53,30 +54,30 @@ async def async_setup_entry(
 ) -> None:
     """Set up the binary sensor platform."""
     coordinator = entry.runtime_data
-    device = coordinator.device
     entities = []
 
-    for sensor_data in device.get_supported_binary_sensors():
-        data_type = cast(str, sensor_data.get("type", "input"))
-        base_desc = BINARY_SENSOR_MAP.get(data_type)
+    for device in coordinator.get_devices():
+        for sensor_data in device.get_supported_binary_sensors():
+            data_type = cast(str, sensor_data.get("type", "input"))
+            base_desc = BINARY_SENSOR_MAP.get(data_type)
 
-        if not base_desc:
-            _LOGGER.error("Unknown binary sensor type '%s'. Skipping", data_type)
-            continue
+            if not base_desc:
+                _LOGGER.error("Unknown binary sensor type '%s'. Skipping", data_type)
+                continue
 
-        item_id = str(sensor_data["item_id"])
-        name_val = sensor_data.get("name")
-        translation_key, placeholders = _get_translation_config(data_type, name_val)
+            item_id = str(sensor_data["item_id"])
+            name_val = sensor_data.get("name")
+            translation_key, placeholders = _get_translation_config(data_type, name_val)
 
-        description = PapouchBinarySensorEntityDescription(
-            key=f"{data_type}_{item_id}",
-            data_key=data_type,
-            item_id=item_id,
-            device_class=base_desc.device_class,
-            translation_key=translation_key,
-            translation_placeholders=placeholders,
-        )
-        entities.append(PapouchBinarySensor(coordinator, description))
+            description = PapouchBinarySensorEntityDescription(
+                key=f"{data_type}_{item_id}",
+                data_key=data_type,
+                item_id=item_id,
+                device_class=base_desc.device_class,
+                translation_key=translation_key,
+                translation_placeholders=placeholders,
+            )
+            entities.append(PapouchBinarySensor(coordinator, device, description))
 
     async_add_entities(entities)
 
@@ -88,14 +89,16 @@ class PapouchBinarySensor(PapouchEntity, BinarySensorEntity):
 
     def __init__(
         self,
-        coordinator: PapouchDataUpdateCoordinator,
+        coordinator: PapouchBaseCoordinator,
+        device: PapouchDevice,
         description: PapouchBinarySensorEntityDescription,
     ) -> None:
         """Initialize the binary sensor."""
-        super().__init__(coordinator)
+        super().__init__(coordinator, device)
         self.entity_description = description
-        mac = format_mac(coordinator.device.mac_address)
-        self._attr_unique_id = f"{mac}_{description.data_key}_{description.item_id}"
+        self._attr_unique_id = (
+            f"{self.device.identifier}_{description.data_key}_{description.item_id}"
+        )
 
         if description.translation_placeholders:
             self._attr_translation_placeholders = description.translation_placeholders

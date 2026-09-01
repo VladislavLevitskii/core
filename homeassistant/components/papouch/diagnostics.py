@@ -5,9 +5,9 @@ from typing import TYPE_CHECKING, Any
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.helpers.redact import async_redact_data
 
-from .coordinator import PapouchDataUpdateCoordinator
+from .coordinator import PapouchBaseCoordinator
 
-type PapouchConfigEntry = ConfigEntry[PapouchDataUpdateCoordinator]
+type PapouchConfigEntry = ConfigEntry[PapouchBaseCoordinator]
 
 if TYPE_CHECKING:
     from homeassistant.core import HomeAssistant
