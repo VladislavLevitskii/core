@@ -88,6 +88,18 @@
         "description": "Update the connection details for your device.",
         "title": "Reconfigure {name}"
       },
+      "reconfigure_serial": {
+        "data": {
+          "baudrate": "Baudrate",
+          "port": "Serial Port"
+        },
+        "data_description": {
+          "baudrate": "Enter the communication speed (baudrate).",
+          "port": "Enter the serial port path (e.g., /dev/ttyUSB0 or COM1)."
+        },
+        "description": "Update the serial connection details for your device.",
+        "title": "Reconfigure {name}"
+      },
       "serial": {
         "data": {
           "baudrate": "Baudrate",
@@ -281,6 +293,9 @@
     "invalid_auth": {
       "message": "Invalid password of device {name} ({location})"
     },
+    "unable_create_device": {
+      "message": "Device with {serial_number} couldn't be created."
+    },
     "unable_open_port": {
       "message": "Unable to open {port}."
     },
@@ -289,7 +304,52 @@
     }
   },
   "options": {
+    "error": {
+      "address_already_used": "This address is already in use by another device.",
+      "cannot_connect": "Cannot connect to the device at the given address.",
+      "cannot_connect_broadcast": "Cannot connect to the device via broadcast (make sure only ONE unconfigured device is on the line).",
+      "invalid_serial_format": "Invalid format. The serial number must contain a slash (e.g. 0123/4567).",
+      "no_free_addresses": "No free addresses left in the pool (0-253).",
+      "serial_already_used": "This serial number is already in use.",
+      "unable_create_device": "Device couldn't be created or serial number couldn't be fetched."
+    },
     "step": {
+      "add_device_by_address": {
+        "data": {
+          "address": "Device Address (0-253)"
+        },
+        "data_description": {
+          "address": "Enter the communication address of the device on the bus (0 to 253)."
+        },
+        "title": "Add Device by Address"
+      },
+      "add_device_by_serial_number": {
+        "data": {
+          "serial_number": "Device Serial Number"
+        },
+        "data_description": {
+          "serial_number": "Enter the exact serial number including the slash (e.g., 0123/4567)."
+        },
+        "description": "WARNING: The device will get a new address from the pool. Ensure only ONE device is connected to the bus during this process. \n If you cannot connect the devices, there are possible reasons: \n 1) Different serial number \n 2) Different baudrate \n 3) Different port",
+        "title": "Add Device by Serial Number"
+      },
+      "add_device_menu": {
+        "description": "How do you want to add the new device?",
+        "menu_options": {
+          "add_device_by_address": "By Address",
+          "add_device_by_serial_number": "By Serial Number"
+        },
+        "title": "Add Device"
+      },
+      "hub_settings": {
+        "data": {
+          "refresh_rate": "Scan interval (seconds)"
+        },
+        "data_description": {
+          "refresh_rate": "How often Home Assistant should poll the devices on this hub."
+        },
+        "title": "Hub Settings"
+      },
       "init": {
         "data": {
           "refresh_rate": "Scan interval (seconds)"
@@ -297,6 +357,23 @@
         "data_description": {
           "refresh_rate": "How often Home Assistant should poll the device for new data."
         }
+      },
+      "remove_device": {
+        "data": {
+          "device": "Select device to remove"
+        },
+        "data_description": {
+          "device": "Select the device you want to remove from this serial hub."
+        },
+        "title": "Remove Device"
+      },
+      "serial_menu": {
+        "menu_options": {
+          "add_device_menu": "Add a new device",
+          "hub_settings": "Hub settings",
+          "remove_device": "Remove a device"
+        },
+        "title": "Serial Hub Options"
       }
     }
   }

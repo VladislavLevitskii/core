@@ -1,13 +1,20 @@
 """Config flow for the Papouch integration."""
 
 import asyncio
+import copy
 import ipaddress
 import logging
 import re
 from typing import TYPE_CHECKING, Any, override
 
 import aiohttp
-from aiopapouch import PapouchHTTPClient, create_network_device, is_device_supported
+from aiopapouch import (
+    PapouchHTTPClient,
+    create_network_device,
+    is_device_supported,
+    parse_device_name,
+    parse_device_serial_number,
+)
 from aiopapouch.exceptions import (
     DeviceAuthError,
     DeviceConnectionError,
@@ -20,8 +27,14 @@ from homeassistant.config_entries import ConfigFlow, ConfigFlowResult, OptionsFl
 from homeassistant.core import callback
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.device_registry import format_mac
+from homeassistant.helpers.selector import (
+    NumberSelector,
+    NumberSelectorConfig,
+    NumberSelectorMode,
+)
 
 from .const import DEFAULT_BAUDRATE, DEFAULT_SCAN_INTERVAL, DEFAULT_WEB_PORT, DOMAIN
+from .coordinator import PapouchSerialDataUpdateCoordinator
 from .discovery import async_discover_papouch_devices
 from .utils import _get_device_name
 
@@ -126,6 +139,7 @@ class PapouchConfigFlow(ConfigFlow, domain=DOMAIN):
             self._abort_if_unique_id_configured()
 
         data = {
+            "connection_type": "network",
             "ip_address": user_input["ip_address"],
             "password": password,
             "device_name": title_name,
@@ -360,6 +374,7 @@ class PapouchConfigFlow(ConfigFlow, domain=DOMAIN):
             self._abort_if_unique_id_configured()
 
             data = {
+                "connection_type": "serial",
                 "port": port,
                 "baudrate": baudrate,
             }
@@ -418,6 +433,7 @@ class PapouchConfigFlow(ConfigFlow, domain=DOMAIN):
             self._abort_if_unique_id_configured()
 
             data = {
+                "connection_type": "serial",
                 "port": port,
                 "baudrate": baudrate,
             }
@@ -637,6 +653,11 @@ class PapouchConfigFlow(ConfigFlow, domain=DOMAIN):
         if entry is None:
             return self.async_abort(reason="unknown")
 
+        connection_type = entry.data.get("connection_type", "network")
+
+        if connection_type == "serial":
+            return await self.async_step_reconfigure_serial(user_input)
+
         if user_input is not None:
             errors, _ = await self._test_connection(
                 user_input["ip_address"],
@@ -689,6 +710,56 @@ class PapouchConfigFlow(ConfigFlow, domain=DOMAIN):
             },
         )
 
+    async def async_step_reconfigure_serial(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Handle reconfiguration for serial hub."""
+        errors: dict[str, str] = {}
+
+        entry_id = self.context.get("entry_id")
+
+        if not entry_id:
+            return self.async_abort(reason="unknown")
+
+        entry = self.hass.config_entries.async_get_entry(entry_id)
+
+        if entry is None:
+            return self.async_abort(reason="unknown")
+
+        if user_input is not None:
+            port = user_input["port"]
+            baudrate = user_input["baudrate"]
+
+            self.hass.config_entries.async_update_entry(
+                entry,
+                data={
+                    **entry.data,
+                    "port": port,
+                    "baudrate": baudrate,
+                },
+                title=f"Papouch - {port}",
+            )
+            await self.hass.config_entries.async_reload(entry.entry_id)
+            return self.async_abort(reason="reconfigure_successful")
+
+        schema = vol.Schema(
+            {
+                vol.Required(
+                    "port", default=entry.data.get("port", "/dev/ttyUSB0")
+                ): str,
+                vol.Required(
+                    "baudrate", default=entry.data.get("baudrate", DEFAULT_BAUDRATE)
+                ): int,
+            }
+        )
+
+        return self.async_show_form(
+            step_id="reconfigure_serial",
+            data_schema=schema,
+            errors=errors,
+            description_placeholders={"name": entry.title},
+        )
+
     @override
     @staticmethod
     @callback
@@ -700,10 +771,21 @@ class PapouchConfigFlow(ConfigFlow, domain=DOMAIN):
 class PapouchOptionsFlowHandler(OptionsFlow):
     """Handle Papouch options."""
 
+    def __init__(self) -> None:
+        """Initialize options flow."""
+        self._devices: list[dict[str, Any]] = []
+
     async def async_step_init(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
         """Manage the options."""
+        connection_type = self.config_entry.data.get("connection_type", "network")
+
+        if connection_type == "serial":
+            # deep copy for HA comparison, otherwise options flow will be cancelled
+            self._devices = copy.deepcopy(self.config_entry.options.get("devices", []))
+            return await self.async_step_serial_menu()
+
         if user_input is not None:
             return self.async_create_entry(title="", data=user_input)
 
@@ -720,3 +802,239 @@ class PapouchOptionsFlowHandler(OptionsFlow):
         )
 
         return self.async_show_form(step_id="init", data_schema=schema)
+
+    async def async_step_serial_menu(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Menu for managing the serial hub."""
+        menu_options = ["add_device_menu", "hub_settings"]
+
+        if self._devices:
+            menu_options.insert(1, "remove_device")
+
+        return self.async_show_menu(
+            step_id="serial_menu",
+            menu_options=menu_options,
+        )
+
+    async def async_step_add_device_menu(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Menu to choose how to add a serial device."""
+        return self.async_show_menu(
+            step_id="add_device_menu",
+            menu_options=["add_device_by_address", "add_device_by_serial_number"],
+        )
+
+    async def async_step_hub_settings(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Configure general hub settings like refresh rate."""
+        if user_input is not None:
+            new_options = {**self.config_entry.options, **user_input}
+            return self.async_create_entry(title="", data=new_options)
+
+        current_refresh = self.config_entry.options.get(
+            "refresh_rate", DEFAULT_SCAN_INTERVAL
+        )
+
+        schema = vol.Schema(
+            {
+                vol.Required("refresh_rate", default=current_refresh): vol.All(
+                    int, vol.Range(min=1, max=3600)
+                ),
+            }
+        )
+
+        return self.async_show_form(step_id="hub_settings", data_schema=schema)
+
+    async def _get_device_details(
+        self, address: int
+    ) -> tuple[dict[str, str], str | None, str | None]:
+        """Test device connection and return errors, name, and serial number."""
+        coordinator: PapouchSerialDataUpdateCoordinator = self.config_entry.runtime_data
+
+        try:
+            pkt_man_data = await coordinator.api_client.get_man_data(
+                address, f"Unknown device with {address} address"
+            )
+
+            serial_number = parse_device_serial_number(pkt_man_data.data)
+
+            pkt_info = await coordinator.api_client.get_info(
+                address, f"Device at address {address}"
+            )
+            device_name = parse_device_name(pkt_info.data)
+
+        except DeviceConnectionError:
+            return {"base": "cannot_connect"}, None, None
+
+        return {}, device_name, serial_number
+
+    def _get_next_available_address(self) -> int | None:
+        """Find the next available address from 0 to 253."""
+        used_addresses = {device["address"] for device in self._devices}
+        for addr in range(254):
+            if addr not in used_addresses:
+                return addr
+        return None
+
+    async def async_step_add_device_by_address(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Add a new serial device by specifying its address."""
+        errors: dict[str, str] = {}
+        serial_number = None
+        device_name = None
+
+        if user_input is not None:
+            address = int(user_input["address"])
+
+            for device in self._devices:
+                if device["address"] == address:
+                    errors["address"] = "address_already_used"
+
+            if not errors:
+                errors, device_name, serial_number = await self._get_device_details(
+                    address
+                )
+
+            if not errors and serial_number:
+                for device in self._devices:
+                    if device["serial_number"] == serial_number:
+                        errors["base"] = "serial_already_used"
+
+                if not errors:
+                    self._devices.append(
+                        {
+                            "address": address,
+                            "serial_number": serial_number,
+                            "name": device_name,
+                        }
+                    )
+
+                    new_options = {
+                        **self.config_entry.options,
+                        "devices": self._devices,
+                    }
+                    return self.async_create_entry(title="", data=new_options)
+
+        schema = vol.Schema(
+            {
+                vol.Required("address", default=1): NumberSelector(
+                    NumberSelectorConfig(
+                        min=0,
+                        max=253,
+                        step=1,
+                        mode=NumberSelectorMode.BOX,
+                    )
+                ),
+            }
+        )
+
+        return self.async_show_form(
+            step_id="add_device_by_address", data_schema=schema, errors=errors
+        )
+
+    async def async_step_add_device_by_serial_number(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Add a new serial device by specifying its serial number."""
+        errors: dict[str, str] = {}
+        device_name = None
+
+        if user_input is not None:
+            serial_number = user_input["serial_number"]
+
+            if "/" not in serial_number:
+                errors["serial_number"] = "invalid_serial_format"
+
+            if not errors:
+                for device in self._devices:
+                    if device["serial_number"] == serial_number:
+                        errors["serial_number"] = "serial_already_used"
+                        break
+
+            new_address = self._get_next_available_address()
+            if new_address is None:
+                errors["base"] = "no_free_addresses"
+
+            if not errors and new_address is not None:
+                coordinator: PapouchSerialDataUpdateCoordinator = (
+                    self.config_entry.runtime_data
+                )
+                try:
+                    await coordinator.api_client.get_man_data(
+                        0xFE, "Unknown device on broadcast (0xFE)"
+                    )
+
+                    await coordinator.api_client.set_address(
+                        new_address,
+                        serial_number,
+                        f"device with {new_address} for SN {serial_number}",
+                    )
+
+                    errors, device_name, _ = await self._get_device_details(new_address)
+
+                except DeviceConnectionError:
+                    errors["base"] = "cannot_connect_broadcast"
+
+            if not errors:
+                self._devices.append(
+                    {
+                        "address": new_address,
+                        "serial_number": serial_number,
+                        "name": device_name,
+                    }
+                )
+
+                new_options = {
+                    **self.config_entry.options,
+                    "devices": self._devices,
+                }
+                return self.async_create_entry(title="", data=new_options)
+
+        schema = vol.Schema(
+            {
+                vol.Required("serial_number"): str,
+            }
+        )
+
+        return self.async_show_form(
+            step_id="add_device_by_serial_number", data_schema=schema, errors=errors
+        )
+
+    async def async_step_remove_device(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Remove a device from the hub."""
+        if not self._devices:
+            return await self.async_step_serial_menu()
+
+        if user_input is not None:
+            device_to_remove = user_input["device"]
+
+            self._devices = [
+                d for d in self._devices if d["serial_number"] != device_to_remove
+            ]
+
+            new_options = {
+                **self.config_entry.options,
+                "devices": self._devices,
+            }
+            return self.async_create_entry(title="", data=new_options)
+
+        options = {
+            dev[
+                "serial_number"
+            ]: f"{dev['name']}, address: {dev['address']}, SN: {dev['serial_number']}"
+            for dev in self._devices
+        }
+
+        schema = vol.Schema(
+            {
+                vol.Required("device"): vol.In(options),
+            }
+        )
+
+        return self.async_show_form(step_id="remove_device", data_schema=schema)

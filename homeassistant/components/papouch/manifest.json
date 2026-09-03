@@ -15,8 +15,8 @@
     }
   ],
   "documentation": "https://www.home-assistant.io/integrations/papouch",
-  "integration_type": "device",
+  "integration_type": "hub",
   "iot_class": "local_polling",
   "quality_scale": "platinum",
-  "requirements": ["aiopapouch==0.1.14", "pap_spinel==0.0.3"]
+  "requirements": ["aiopapouch==0.1.15", "pap_spinel==0.1.1"]
 }

@@ -2,7 +2,7 @@
 
 from aiopapouch import PapouchDevice
 
-from homeassistant.helpers.device_registry import CONNECTION_NETWORK_MAC, DeviceInfo
+from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .const import DOMAIN
@@ -22,6 +22,5 @@ class PapouchEntity(CoordinatorEntity[PapouchBaseCoordinator]):
 
         self.device = device
         self._attr_device_info = DeviceInfo(
-            connections={(CONNECTION_NETWORK_MAC, device.identifier)},
             identifiers={(DOMAIN, device.identifier)},
         )

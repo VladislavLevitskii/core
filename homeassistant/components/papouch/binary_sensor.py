@@ -107,8 +107,9 @@ class PapouchBinarySensor(PapouchEntity, BinarySensorEntity):
     @override
     def is_on(self) -> bool:
         """Return True if the binary sensor is on."""
+        device_data = self.coordinator.data.get(self.device.identifier, {})
         return bool(
-            self.coordinator.data.get(self.entity_description.data_key, {}).get(
+            device_data.get(self.entity_description.data_key, {}).get(
                 self.entity_description.item_id
             )
             == 1

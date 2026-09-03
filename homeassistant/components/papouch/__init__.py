@@ -1,9 +1,16 @@
 """Initialization file of the integration."""
 
+import logging
 from typing import TYPE_CHECKING
 
 import aiohttp
-from aiopapouch import PapouchHTTPClient, PapouchSerialClient, create_network_device
+from aiopapouch import (
+    PapouchHTTPClient,
+    PapouchSerialClient,
+    create_network_device,
+    create_serial_device,
+)
+from aiopapouch.exceptions import DeviceConnectionError
 from pap_spinel import SerialTransport, SpinelClient, SpinelTransportError
 
 from homeassistant.config_entries import ConfigEntry
@@ -32,6 +39,9 @@ PLATFORMS = [
     Platform.SWITCH,
 ]
 
+_LOGGER = logging.getLogger(__name__)
+
+
 type PapouchConfigEntry = ConfigEntry[PapouchBaseCoordinator]
 
 
@@ -41,7 +51,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: PapouchConfigEntry) -> b
 
     coordinator: PapouchBaseCoordinator
 
-    if "ip_address" in entry.data:
+    connection_type = entry.data.get("connection_type", "network")
+
+    if connection_type == "network":
         session = async_get_clientsession(hass)
         password = entry.data.get("password", "")
         web_port = entry.data.get("web_port", DEFAULT_WEB_PORT)
@@ -97,7 +109,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: PapouchConfigEntry) -> b
             hass, api_client, entry, device
         )
 
-    elif "port" in entry.data:
+    elif connection_type == "serial":
         port = entry.data["port"]
         baudrate = entry.data["baudrate"]
 
@@ -114,7 +126,58 @@ async def async_setup_entry(hass: HomeAssistant, entry: PapouchConfigEntry) -> b
                 translation_placeholders={"port": port},
             ) from err
 
-        coordinator = PapouchSerialDataUpdateCoordinator(hass, serial_client, entry, [])
+        devices_config = entry.options.get("devices", [])
+        devices = []
+
+        device_registry = dr.async_get(hass)
+
+        expected_serial_numbers = {
+            dev_conf["serial_number"] for dev_conf in devices_config
+        }
+
+        existing_devices = dr.async_entries_for_config_entry(
+            device_registry, entry.entry_id
+        )
+
+        for device_entry in existing_devices:
+            for domain, device_id in device_entry.identifiers:
+                if domain == DOMAIN:
+                    if device_id != port and device_id not in expected_serial_numbers:
+                        device_registry.async_remove_device(device_entry.id)
+                    break
+
+        for dev_conf in devices_config:
+            address = dev_conf["address"]
+            serial_number = dev_conf["serial_number"]
+
+            try:
+                device = await create_serial_device(serial_client, address)
+            except DeviceConnectionError as err:
+                raise ConfigEntryNotReady(
+                    translation_domain=DOMAIN,
+                    translation_key="unable_create_device",
+                    translation_placeholders={"serial_number": serial_number},
+                ) from err
+
+            if device:
+                devices.append(device)
+
+                location_stripped = device.location.strip() if device.location else ""
+                device_location = location_stripped or UNKNOWN_LOCATION
+
+                device_registry.async_get_or_create(
+                    config_entry_id=entry.entry_id,
+                    identifiers={(DOMAIN, device.identifier)},
+                    name=f"{device.name} (Address {address})",
+                    manufacturer=device.manufacturer,
+                    model=device.name,
+                    serial_number=serial_number,
+                    suggested_area=device_location,
+                )
+
+        coordinator = PapouchSerialDataUpdateCoordinator(
+            hass, serial_client, entry, devices
+        )
 
     else:
         return False

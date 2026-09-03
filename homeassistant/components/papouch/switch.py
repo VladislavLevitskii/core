@@ -99,9 +99,10 @@ class PapouchSwitch(PapouchEntity, SwitchEntity):
     @override
     def is_on(self) -> bool | None:
         """Return True if the switch is on."""
-        val = self.coordinator.data.get("switch", {}).get(
-            self.entity_description.item_id
-        )
+
+        device_data = self.coordinator.data.get(self.device.identifier, {})
+
+        val = device_data.get("switch", {}).get(self.entity_description.item_id)
         return val == 1 if val is not None else None
 
     @override
@@ -131,8 +132,10 @@ class PapouchSwitch(PapouchEntity, SwitchEntity):
                 }
             ) from err
 
-        if self.coordinator.data and "switch" in self.coordinator.data:
-            self.coordinator.data["switch"][self.entity_description.item_id] = 1
+        device_data = self.coordinator.data.get(self.device.identifier, {})
+
+        if device_data and "switch" in device_data:
+            device_data["switch"][self.entity_description.item_id] = 1
 
         self.async_write_ha_state()
 
@@ -163,7 +166,9 @@ class PapouchSwitch(PapouchEntity, SwitchEntity):
                 }
             ) from err
 
-        if self.coordinator.data and "switch" in self.coordinator.data:
-            self.coordinator.data["switch"][self.entity_description.item_id] = 0
+        device_data = self.coordinator.data.get(self.device.identifier, {})
+
+        if device_data and "switch" in device_data:
+            device_data["switch"][self.entity_description.item_id] = 0
 
         self.async_write_ha_state()
