@@ -149,6 +149,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: PapouchConfigEntry) -> b
         for dev_conf in devices_config:
             address = dev_conf["address"]
             serial_number = dev_conf["serial_number"]
+            name = dev_conf["name"]
 
             try:
                 device = await create_serial_device(serial_client, address)
@@ -173,6 +174,13 @@ async def async_setup_entry(hass: HomeAssistant, entry: PapouchConfigEntry) -> b
                     model=device.name,
                     serial_number=serial_number,
                     suggested_area=device_location,
+                )
+
+            else:
+                raise ConfigEntryNotReady(
+                    translation_domain=DOMAIN,
+                    translation_key="unsupported_device",
+                    translation_placeholders={"name": name, "location": serial_number},
                 )
 
         coordinator = PapouchSerialDataUpdateCoordinator(

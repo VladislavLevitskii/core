@@ -330,7 +330,7 @@
         "data_description": {
           "serial_number": "Enter the exact serial number including the slash (e.g., 0123/4567)."
         },
-        "description": "WARNING: The device will get a new address from the pool. Ensure only ONE device is connected to the bus during this process. \n If you cannot connect the devices, there are possible reasons: \n 1) Different serial number \n 2) Different baudrate \n 3) Different port",
+        "description": "WARNING: The device will get a new address from the pool. \n If you cannot connect the devices, there are possible reasons: \n 1) Different serial number \n 2) Different baudrate \n 3) Different port",
         "title": "Add Device by Serial Number"
       },
       "add_device_menu": {
