@@ -307,11 +307,12 @@
     "error": {
       "address_already_used": "This address is already in use by another device.",
       "cannot_connect": "Cannot connect to the device at the given address.",
-      "cannot_connect_broadcast": "Cannot connect to the device via broadcast (make sure only ONE unconfigured device is on the line).",
+      "cannot_connect_broadcast": "Cannot connect to the device via broadcast.",
       "invalid_serial_format": "Invalid format. The serial number must contain a slash (e.g. 0123/4567).",
       "no_free_addresses": "No free addresses left in the pool (0-253).",
       "serial_already_used": "This serial number is already in use.",
-      "unable_create_device": "Device couldn't be created or serial number couldn't be fetched."
+      "unable_create_device": "Device couldn't be created or serial number couldn't be fetched.",
+      "unsupported_device": "This device {device_name} is unsupported."
     },
     "step": {
       "add_device_by_address": {

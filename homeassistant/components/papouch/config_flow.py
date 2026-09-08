@@ -892,7 +892,10 @@ class PapouchOptionsFlowHandler(OptionsFlow):
                     address
                 )
 
-            if not errors and serial_number:
+                if not is_device_supported(device_name, "serial"):
+                    errors["base"] = "unsupported_device"
+
+            if not errors and serial_number and device_name:
                 for device in self._devices:
                     if device["serial_number"] == serial_number:
                         errors["base"] = "serial_already_used"
@@ -910,7 +913,11 @@ class PapouchOptionsFlowHandler(OptionsFlow):
                         **self.config_entry.options,
                         "devices": self._devices,
                     }
-                    return self.async_create_entry(title="", data=new_options)
+                    return self.async_create_entry(
+                        title="",
+                        data=new_options,
+                        description_placeholders={"device_name": device_name or ""},
+                    )
 
         schema = vol.Schema(
             {
@@ -926,7 +933,10 @@ class PapouchOptionsFlowHandler(OptionsFlow):
         )
 
         return self.async_show_form(
-            step_id="add_device_by_address", data_schema=schema, errors=errors
+            step_id="add_device_by_address",
+            data_schema=schema,
+            errors=errors,
+            description_placeholders={"device_name": device_name or ""},
         )
 
     async def _get_next_available_address(self) -> int | None:
@@ -984,7 +994,13 @@ class PapouchOptionsFlowHandler(OptionsFlow):
                         f"device with {new_address} for SN {serial_number}",
                     )
 
+                    # some devices restart after settings a new address
+                    await asyncio.sleep(2)
+
                     errors, device_name, _ = await self._get_device_details(new_address)
+
+                    if not is_device_supported(device_name, "serial"):
+                        errors["base"] = "unsupported_device"
 
                 except DeviceConnectionError:
                     errors["base"] = "cannot_connect_broadcast"
@@ -1002,7 +1018,11 @@ class PapouchOptionsFlowHandler(OptionsFlow):
                     **self.config_entry.options,
                     "devices": self._devices,
                 }
-                return self.async_create_entry(title="", data=new_options)
+                return self.async_create_entry(
+                    title="",
+                    data=new_options,
+                    description_placeholders={"device_name": device_name or ""},
+                )
 
         schema = vol.Schema(
             {
@@ -1011,7 +1031,10 @@ class PapouchOptionsFlowHandler(OptionsFlow):
         )
 
         return self.async_show_form(
-            step_id="add_device_by_serial_number", data_schema=schema, errors=errors
+            step_id="add_device_by_serial_number",
+            data_schema=schema,
+            errors=errors,
+            description_placeholders={"device_name": device_name or ""},
         )
 
     async def async_step_remove_device(
@@ -1032,6 +1055,11 @@ class PapouchOptionsFlowHandler(OptionsFlow):
                 **self.config_entry.options,
                 "devices": self._devices,
             }
+
+            self.hass.async_create_task(
+                self.hass.config_entries.async_reload(self.config_entry.entry_id)
+            )
+
             return self.async_create_entry(title="", data=new_options)
 
         options = {
