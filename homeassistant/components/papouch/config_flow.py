@@ -48,7 +48,11 @@ if TYPE_CHECKING:
 
 _LOGGER = logging.getLogger(__name__)
 
+TCP_SERVER_MODE_INDEX = 0
+TCP_CLIENT_MODE_INDEX = 1
+UDP_MODE_INDEX = 2
 WEB_MODE_INDEX = 3
+
 DHCP_TIMEOUT = 5
 
 
@@ -87,8 +91,8 @@ class PapouchConfigFlow(ConfigFlow, domain=DOMAIN):
         ):
             _LOGGER.exception("Failed to connect to the device")
             return {"base": "cannot_connect"}, None
-        else:
-            return {}, mode_device
+
+        return {}, mode_device
 
     async def _async_process_user_input(
         self, user_input: dict[str, Any]
@@ -111,18 +115,11 @@ class PapouchConfigFlow(ConfigFlow, domain=DOMAIN):
 
         self._saved_input = user_input
 
-        if mode_device == -1:
-            return {}, self.async_abort(reason="mode_is_missing")
-        if mode_device != WEB_MODE_INDEX:
-            return {}, await self.async_step_web_mode()
-
         session = async_get_clientsession(self.hass)
 
         client = PapouchHTTPClient(
             ip_address, session, password=password, web_port=web_port
         )
-
-        title_name = await _get_device_name(self.hass, ip_address, password)
 
         try:
             mac_address = await client.get_device_mac()
@@ -131,13 +128,47 @@ class PapouchConfigFlow(ConfigFlow, domain=DOMAIN):
         except aiohttp.ClientError, DeviceLogicError:
             errors["base"] = "cannot_connect"
 
+        formatted_mac = format_mac(mac_address)
+
         if errors:
             return errors, None
 
-        if mac_address:
-            formatted_mac = format_mac(mac_address)
+        title_name = await _get_device_name(self.hass, ip_address, password)
+
+        if mode_device is None:
+            # errors shouldn't be empty -> `if errors` should trigger and return
+            # mypy fix
+            return {}, self.async_abort(reason="unknown")
+
+        if mode_device == TCP_SERVER_MODE_INDEX:
+            tcp_port = await client.get_device_tcp_port()
             await self.async_set_unique_id(formatted_mac)
             self._abort_if_unique_id_configured()
+
+            data = {
+                "connection_type": "tcp",
+                "host": user_input["ip_address"],
+                "port": tcp_port,
+            }
+            options = {
+                "refresh_rate": user_input.get("refresh_rate", DEFAULT_SCAN_INTERVAL)
+            }
+            return {}, self.async_create_entry(
+                title=f"{title_name} - {user_input['ip_address']}",
+                data=data,
+                options=options,
+            )
+
+        if mode_device in (TCP_CLIENT_MODE_INDEX, UDP_MODE_INDEX):
+            return {}, self.async_abort(reason="web_mode_required")
+
+        if mode_device == WEB_MODE_INDEX:
+            pass
+        else:
+            return {}, self.async_abort(reason="unknown")
+
+        await self.async_set_unique_id(formatted_mac)
+        self._abort_if_unique_id_configured()
 
         data = {
             "connection_type": "network",

@@ -11,7 +11,7 @@ from aiopapouch import (
     create_serial_device,
 )
 from aiopapouch.exceptions import DeviceConnectionError
-from pap_spinel import SerialTransport, SpinelClient, SpinelTransportError
+from pap_spinel import SerialTransport, SpinelClient, SpinelTransportError, TcpTransport
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import Platform
@@ -80,7 +80,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: PapouchConfigEntry) -> b
         except aiohttp.ClientError as err:
             raise ConfigEntryNotReady(
                 translation_domain=DOMAIN,
-                translation_key="cannot_connect",
+                translation_key="cannot_connect_http",
                 translation_placeholders={"name": safe_name, "location": safe_location},
             ) from err
 
@@ -112,10 +112,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: PapouchConfigEntry) -> b
     elif connection_type == "serial":
         port = entry.data["port"]
         baudrate = entry.data["baudrate"]
+        transport = SerialTransport(port, baudrate)
 
-        serial_client = PapouchSerialClient(
-            SpinelClient(SerialTransport(port, baudrate))
-        )
+        serial_client = PapouchSerialClient(SpinelClient(transport))
 
         try:
             await serial_client.open()
@@ -185,6 +184,69 @@ async def async_setup_entry(hass: HomeAssistant, entry: PapouchConfigEntry) -> b
 
         coordinator = PapouchSerialDataUpdateCoordinator(
             hass, serial_client, entry, devices
+        )
+
+    elif connection_type == "tcp":
+        host = entry.data["host"]
+        port = entry.data["port"]
+
+        serial_client = PapouchSerialClient(SpinelClient(TcpTransport(host, port)))
+
+        try:
+            await serial_client.open()
+        except SpinelTransportError as err:
+            raise ConfigEntryNotReady(
+                translation_domain=DOMAIN,
+                translation_key="cannot_connect_tcp",
+                translation_placeholders={"name": host, "location": port},
+            ) from err
+
+        try:
+            device = await create_serial_device(serial_client, address=0xFE)
+        except DeviceConnectionError as err:
+            raise ConfigEntryNotReady(
+                translation_domain=DOMAIN,
+                translation_key="unable_create_device",
+                translation_placeholders={"serial_number": host},
+            ) from err
+
+        if not device:
+            raise ConfigEntryNotReady(
+                translation_domain=DOMAIN,
+                translation_key="unsupported_device",
+                translation_placeholders={"name": host, "location": ""},
+            )
+
+        session = async_get_clientsession(hass)
+        network_client = PapouchHTTPClient(host, session)
+
+        try:
+            mac_address = await network_client.get_device_mac()
+        except DeviceConnectionError as err:
+            raise ConfigEntryNotReady(
+                translation_domain=DOMAIN,
+                translation_key="cannot_connect_http",
+                translation_placeholders={
+                    "name": device.name,
+                    "location": device.location,
+                },
+            ) from err
+
+        device.conf.identifier = mac_address
+
+        device_registry = dr.async_get(hass)
+        device_registry.async_get_or_create(
+            config_entry_id=entry.entry_id,
+            connections={(dr.CONNECTION_NETWORK_MAC, mac_address)},
+            identifiers={(DOMAIN, mac_address)},
+            name=device.name,
+            manufacturer=device.manufacturer,
+            model=device.name,
+            suggested_area=device.location or UNKNOWN_LOCATION,
+        )
+
+        coordinator = PapouchSerialDataUpdateCoordinator(
+            hass, serial_client, entry, [device]
         )
 
     else:

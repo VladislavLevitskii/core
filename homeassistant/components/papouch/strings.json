@@ -7,7 +7,7 @@
       "reauth_successful": "Re-authentication was successful",
       "reconfigure_successful": "Device reconfiguration was successful.",
       "unsupported_device": "This device is unsupported.",
-      "web_mode_required": "The integration requires the device to be in web mode to function."
+      "web_mode_required": "The integration requires the device to be in WEB mode or TCP server to function."
     },
     "create_entry": {
       "default": "The device has been successfully configured.",
@@ -286,6 +286,12 @@
   "exceptions": {
     "cannot_connect": {
       "message": "Failed to connect to device {name} ({location})."
+    },
+    "cannot_connect_http": {
+      "message": "Failed to connect to device {name} ({location}) via HTTP."
+    },
+    "cannot_connect_tcp": {
+      "message": "Failed to connect to device {name} ({location}) via TCP."
     },
     "command_failed": {
       "message": "Failed to execute command {cmd} on {name}."
