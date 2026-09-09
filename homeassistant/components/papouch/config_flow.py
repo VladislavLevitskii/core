@@ -8,19 +8,12 @@ import re
 from typing import TYPE_CHECKING, Any, override
 
 import aiohttp
-from aiopapouch import (
-    PapouchHTTPClient,
-    create_network_device,
-    is_device_supported,
-    parse_device_name,
-    parse_device_serial_number,
-)
+from aiopapouch import PapouchHTTPClient, create_network_device, is_device_supported
 from aiopapouch.exceptions import (
     DeviceAuthError,
     DeviceConnectionError,
     DeviceLogicError,
 )
-from pap_spinel import INST_INFO
 import serial.tools.list_ports
 import voluptuous as vol
 
@@ -34,10 +27,26 @@ from homeassistant.helpers.selector import (
     NumberSelectorMode,
 )
 
-from .const import DEFAULT_BAUDRATE, DEFAULT_SCAN_INTERVAL, DEFAULT_WEB_PORT, DOMAIN
+from .const import (
+    DEFAULT_BAUDRATE,
+    DEFAULT_SCAN_INTERVAL,
+    DEFAULT_WEB_PORT,
+    DHCP_TIMEOUT,
+    DOMAIN,
+    TCP_CLIENT_MODE_INDEX,
+    TCP_SERVER_MODE_INDEX,
+    UDP_MODE_INDEX,
+    WEB_MODE_INDEX,
+)
 from .coordinator import PapouchSerialDataUpdateCoordinator
 from .discovery import async_discover_papouch_devices
-from .utils import _get_device_name
+from .utils import (
+    _async_fetch_network_details,
+    _get_device_details,
+    _get_device_name,
+    _get_network_schema,
+    _get_next_available_address,
+)
 
 if TYPE_CHECKING:
     from collections.abc import Mapping
@@ -47,13 +56,6 @@ if TYPE_CHECKING:
     from . import PapouchConfigEntry
 
 _LOGGER = logging.getLogger(__name__)
-
-TCP_SERVER_MODE_INDEX = 0
-TCP_CLIENT_MODE_INDEX = 1
-UDP_MODE_INDEX = 2
-WEB_MODE_INDEX = 3
-
-DHCP_TIMEOUT = 5
 
 
 class PapouchConfigFlow(ConfigFlow, domain=DOMAIN):
@@ -121,28 +123,21 @@ class PapouchConfigFlow(ConfigFlow, domain=DOMAIN):
             ip_address, session, password=password, web_port=web_port
         )
 
-        try:
-            mac_address = await client.get_device_mac()
-        except DeviceAuthError:
-            errors["base"] = "invalid_auth"
-        except aiohttp.ClientError, DeviceLogicError:
-            errors["base"] = "cannot_connect"
-
-        formatted_mac = format_mac(mac_address)
+        errors, title_name, mac_address = await _async_fetch_network_details(
+            self.hass, client, ip_address, password, errors
+        )
 
         if errors:
             return errors, None
 
-        title_name = await _get_device_name(self.hass, ip_address, password)
-
-        if mode_device is None:
+        if mode_device is None or title_name is None or mac_address is None:
             # errors shouldn't be empty -> `if errors` should trigger and return
             # mypy fix
             return {}, self.async_abort(reason="unknown")
 
         if mode_device == TCP_SERVER_MODE_INDEX:
             tcp_port = await client.get_device_tcp_port()
-            await self.async_set_unique_id(formatted_mac)
+            await self.async_set_unique_id(mac_address)
             self._abort_if_unique_id_configured()
 
             data = {
@@ -160,14 +155,14 @@ class PapouchConfigFlow(ConfigFlow, domain=DOMAIN):
             )
 
         if mode_device in (TCP_CLIENT_MODE_INDEX, UDP_MODE_INDEX):
-            return {}, self.async_abort(reason="web_mode_required")
+            return {}, await self.async_step_web_mode()
 
         if mode_device == WEB_MODE_INDEX:
             pass
         else:
             return {}, self.async_abort(reason="unknown")
 
-        await self.async_set_unique_id(formatted_mac)
+        await self.async_set_unique_id(mac_address)
         self._abort_if_unique_id_configured()
 
         data = {
@@ -367,17 +362,10 @@ class PapouchConfigFlow(ConfigFlow, domain=DOMAIN):
         if user_input and "web_port" in user_input:
             default_web_port = user_input["web_port"]
 
-        schema = vol.Schema(
-            {
-                vol.Required("ip_address"): vol.In(options),
-                vol.Required("refresh_rate", default=default_interval): vol.All(
-                    int, vol.Range(min=1, max=3600)
-                ),
-                vol.Optional("web_port", default=default_web_port): vol.All(
-                    int, vol.Range(min=1, max=65536)
-                ),
-                vol.Optional("password"): str,
-            }
+        schema = _get_network_schema(
+            default_refresh=default_interval,
+            default_web_port=default_web_port,
+            discovered_ips_options=options,
         )
 
         return self.async_show_form(
@@ -526,18 +514,7 @@ class PapouchConfigFlow(ConfigFlow, domain=DOMAIN):
         if user_input and "web_port" in user_input:
             default_web_port = user_input["web_port"]
 
-        schema = vol.Schema(
-            {
-                vol.Required("ip_address", default=default_ip): str,
-                vol.Required("refresh_rate", default=default_interval): vol.All(
-                    int, vol.Range(min=1, max=3600)
-                ),
-                vol.Optional("web_port", default=default_web_port): vol.All(
-                    int, vol.Range(min=1, max=65536)
-                ),
-                vol.Optional("password"): str,
-            }
-        )
+        schema = _get_network_schema(default_ip, default_interval, default_web_port)
 
         return self.async_show_form(step_id="manual", data_schema=schema, errors=errors)
 
@@ -880,29 +857,6 @@ class PapouchOptionsFlowHandler(OptionsFlow):
 
         return self.async_show_form(step_id="hub_settings", data_schema=schema)
 
-    async def _get_device_details(
-        self, address: int
-    ) -> tuple[dict[str, str], str | None, str | None]:
-        """Test device connection and return errors, name, and serial number."""
-        coordinator: PapouchSerialDataUpdateCoordinator = self.config_entry.runtime_data
-
-        try:
-            pkt_man_data = await coordinator.api_client.get_man_data(
-                address, f"Unknown device with {address} address"
-            )
-
-            serial_number = parse_device_serial_number(pkt_man_data.data)
-
-            pkt_info = await coordinator.api_client.get_info(
-                address, f"Device at address {address}"
-            )
-            device_name = parse_device_name(pkt_info.data)
-
-        except DeviceConnectionError:
-            return {"base": "cannot_connect"}, None, None
-
-        return {}, device_name, serial_number
-
     async def async_step_add_device_by_address(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
@@ -910,6 +864,8 @@ class PapouchOptionsFlowHandler(OptionsFlow):
         errors: dict[str, str] = {}
         serial_number = None
         device_name = None
+
+        coordinator: PapouchSerialDataUpdateCoordinator = self.config_entry.runtime_data
 
         if user_input is not None:
             address = int(user_input["address"])
@@ -919,8 +875,8 @@ class PapouchOptionsFlowHandler(OptionsFlow):
                     errors["address"] = "address_already_used"
 
             if not errors:
-                errors, device_name, serial_number = await self._get_device_details(
-                    address
+                errors, device_name, serial_number = await _get_device_details(
+                    coordinator, address
                 )
 
                 if not is_device_supported(device_name, "serial"):
@@ -970,27 +926,6 @@ class PapouchOptionsFlowHandler(OptionsFlow):
             description_placeholders={"device_name": device_name or ""},
         )
 
-    async def _get_next_available_address(self) -> int | None:
-        """Find the next available address from 0 to 253."""
-
-        used_addresses = {device["address"] for device in self._devices}
-        coordinator: PapouchSerialDataUpdateCoordinator = self.config_entry.runtime_data
-
-        # its better to start from higher addresses
-        for addr in range(250, -1, -1):
-            if addr in used_addresses:
-                continue
-
-            try:
-                # we don't want any other device to have a new address
-                await coordinator.api_client.write_command(
-                    addr, INST_INFO, context="", timeout=0.3
-                )
-            except DeviceConnectionError:
-                return addr
-
-        return None
-
     async def async_step_add_device_by_serial_number(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
@@ -1010,14 +945,15 @@ class PapouchOptionsFlowHandler(OptionsFlow):
                         errors["serial_number"] = "serial_already_used"
                         break
 
-            new_address = await self._get_next_available_address()
+            coordinator: PapouchSerialDataUpdateCoordinator = (
+                self.config_entry.runtime_data
+            )
+
+            new_address = await _get_next_available_address(coordinator, self._devices)
             if new_address is None:
                 errors["base"] = "no_free_addresses"
 
             if not errors and new_address is not None:
-                coordinator: PapouchSerialDataUpdateCoordinator = (
-                    self.config_entry.runtime_data
-                )
                 try:
                     await coordinator.api_client.set_address(
                         new_address,
@@ -1028,7 +964,9 @@ class PapouchOptionsFlowHandler(OptionsFlow):
                     # some devices restart after settings a new address
                     await asyncio.sleep(2)
 
-                    errors, device_name, _ = await self._get_device_details(new_address)
+                    errors, device_name, _ = await _get_device_details(
+                        coordinator, new_address
+                    )
 
                     if not is_device_supported(device_name, "serial"):
                         errors["base"] = "unsupported_device"
