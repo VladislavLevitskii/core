@@ -145,7 +145,7 @@ async def _async_setup_serial_entry(
 
     device_registry = dr.async_get(hass)
 
-    _async_cleanup_stale_devices(devices_config, entry, port)
+    _async_cleanup_stale_devices(device_registry, entry, port)
 
     devices = []
 
