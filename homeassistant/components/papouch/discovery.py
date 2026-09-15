@@ -4,7 +4,7 @@ import asyncio
 import logging
 from typing import TYPE_CHECKING, cast, override
 
-from aiopapouch import PapouchHTTPClient, is_device_supported
+from aiopapouch import PapouchHTTPClient, is_converter_supported, is_device_supported
 from aiopapouch.exceptions import DeviceAuthError, DeviceConnectionError
 
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
@@ -44,7 +44,7 @@ class PapouchDiscoveryProtocol(asyncio.DatagramProtocol):
 
 
 async def _get_device_info(
-    hass: HomeAssistant, ip_address: str
+    hass: HomeAssistant, ip_address: str, connection_type: str = "network"
 ) -> tuple[str, str] | None:
     """Return tuple (location, name) of the device.
 
@@ -58,18 +58,23 @@ async def _get_device_info(
     except (DeviceConnectionError, DeviceAuthError) as err:
         _LOGGER.debug("Could not get device info from %s: %s", ip_address, err)
         return None
-    else:
+
+    if device_name is None or device_location is None:
+        return None
+
+    if connection_type == "network":
         if not is_device_supported(device_name, "network"):
             return None
 
-        if device_name is None or device_location is None:
+    elif connection_type == "network_hub":
+        if not is_converter_supported(device_name):
             return None
 
-        return (device_location, device_name)
+    return (device_location, device_name)
 
 
 async def async_discover_papouch_devices(
-    hass: HomeAssistant,
+    hass: HomeAssistant, connection_type: str = "network"
 ) -> dict[str, tuple[str, str]]:
     """Broadcast discovery request and return a dictionary of discovered devices.
 
@@ -98,7 +103,7 @@ async def async_discover_papouch_devices(
         async with semaphore:
             try:
                 async with asyncio.timeout(ACTIVE_DISCOVERY_TIMEOUT):
-                    data = await _get_device_info(hass, ip)
+                    data = await _get_device_info(hass, ip, connection_type)
                     return (ip, data)
             except TimeoutError:
                 return (ip, None)

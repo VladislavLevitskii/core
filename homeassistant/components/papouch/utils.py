@@ -37,10 +37,14 @@ async def _get_device_name(
         name, location = await client.get_device_info()
         if name and location:
             return f"{name} ({location})"
+        if name and not location:
+            return f"{name} (NONAME)"
+        if not name and location:
+            return f"Papouch device ({location})"
     except aiohttp.ClientError:
         pass
 
-    return "Papouch Device"
+    return "Papouch Device - (NONAME)"
 
 
 async def _get_device_details(
@@ -116,13 +120,14 @@ def _get_network_schema(
     default_refresh: int = DEFAULT_SCAN_INTERVAL,
     default_web_port: int = DEFAULT_WEB_PORT,
     discovered_ips_options: dict[str, str] | None = None,
+    key_name: str = "ip_address",
 ) -> vol.Schema:
 
     ip_selector: Any = vol.In(discovered_ips_options) if discovered_ips_options else str
     ip_key: Any = (
-        vol.Required("ip_address", default=default_ip)
+        vol.Required(key_name, default=default_ip)
         if default_ip
-        else vol.Required("ip_address")
+        else vol.Required(key_name)
     )
 
     return vol.Schema(

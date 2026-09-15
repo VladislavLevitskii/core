@@ -3,6 +3,7 @@
     "abort": {
       "already_configured": "This device is already configured, you can delete it from the integration and configure it again.",
       "cannot_connect": "Home Assistant can't connect to the device.",
+      "converter_different_mode": "The converter is in different mode, please change its mode to TCP server.",
       "mode_is_missing": "The device didn't provide its current mode",
       "reauth_successful": "Re-authentication was successful",
       "reconfigure_successful": "Device reconfiguration was successful.",
@@ -15,8 +16,10 @@
     },
     "error": {
       "cannot_connect": "Failed to connect to the device.",
+      "device_empty_mode": "Device didn't provide its mode.",
       "invalid_auth": "The password you provided is invalid, try a different one.",
-      "invalid_ip_format": "Invalid IPv4 address format."
+      "invalid_ip_format": "Invalid IPv4 address format.",
+      "unsupported_converter": "This converter is unsupported. Please check if this IP belongs to the converter and not some other device."
     },
     "flow_title": "{name}",
     "step": {
@@ -49,7 +52,7 @@
         },
         "title": "Manual Setup"
       },
-      "network": {
+      "network_device": {
         "data": {
           "ip_address": "IPv4 address",
           "password": "Password (optional)",
@@ -63,6 +66,40 @@
           "web_port": "The HTTP port of the device. Default is 80."
         },
         "title": "Add a new network device"
+      },
+      "network_hub": {
+        "data": {
+          "baudrate": "Baudrate",
+          "host": "IPv4 address",
+          "password": "Password (optional)",
+          "refresh_rate": "Scan interval (seconds)",
+          "web_port": "HTTP Port"
+        },
+        "data_description": {
+          "baudrate": "Communication speed (baudrate) for the serial port.",
+          "host": "Enter the IPv4 address of your network hub.",
+          "password": "Leave blank if your device does not require authentication.",
+          "refresh_rate": "How often Home Assistant should poll the device for new data.",
+          "web_port": "The HTTP port of the device. Default is 80."
+        },
+        "title": "Add a new network hub"
+      },
+      "network_hub_manual": {
+        "data": {
+          "baudrate": "Baudrate",
+          "host": "IPv4 address",
+          "password": "Password (optional)",
+          "refresh_rate": "Scan interval (seconds)",
+          "web_port": "HTTP Port"
+        },
+        "data_description": {
+          "baudrate": "Communication speed (baudrate) for the serial port.",
+          "host": "Enter the IPv4 address of your network hub.",
+          "password": "Leave blank if your device does not require authentication.",
+          "refresh_rate": "How often Home Assistant should poll the device for new data.",
+          "web_port": "The HTTP port of the device. Default is 80."
+        },
+        "title": "Add a manual network hub"
       },
       "reauth_confirm": {
         "data": {
@@ -88,6 +125,22 @@
         "description": "Update the connection details for your device.",
         "title": "Reconfigure {name}"
       },
+      "reconfigure_network_hub": {
+        "data": {
+          "baudrate": "Baudrate",
+          "host": "IPv4 address",
+          "password": "Password (optional)",
+          "web_port": "HTTP Port"
+        },
+        "data_description": {
+          "baudrate": "Enter the communication speed (baudrate).",
+          "host": "Enter a new IPv4 address of your network hub.",
+          "password": "Enter a new admin password of the device (Optional).",
+          "web_port": "Enter the HTTP port of the device."
+        },
+        "description": "Update the connection details for your network hub.",
+        "title": "Reconfigure {name}"
+      },
       "reconfigure_serial": {
         "data": {
           "baudrate": "Baudrate",
@@ -100,7 +153,19 @@
         "description": "Update the serial connection details for your device.",
         "title": "Reconfigure {name}"
       },
-      "serial": {
+      "reconfigure_serial_manual": {
+        "data": {
+          "baudrate": "Baudrate",
+          "port": "Port path"
+        },
+        "data_description": {
+          "baudrate": "Enter the communication speed (baudrate).",
+          "port": "Enter the serial port path (e.g., /dev/ttyUSB0 or COM1)."
+        },
+        "description": "Update the manual serial connection details for your device.",
+        "title": "Reconfigure {name} manually"
+      },
+      "serial_hub": {
         "data": {
           "baudrate": "Baudrate",
           "port": "Port",
@@ -131,7 +196,7 @@
           "connection_type": "Connection Type"
         },
         "data_description": {
-          "connection_type": "Choose whether you want to connect a network or create a new serial hub."
+          "connection_type": "Choose whether you want to connect a network device, a network hub, or a serial hub."
         },
         "title": "Select Connection Type"
       },
