@@ -5,9 +5,12 @@ import logging
 from typing import TYPE_CHECKING, cast, override
 
 from aiopapouch import PapouchHTTPClient, is_converter_supported, is_device_supported
+from aiopapouch.devices.converters import async_setup_converter_gnome
 from aiopapouch.exceptions import DeviceAuthError, DeviceConnectionError
 
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
+
+from .const import UNKNOWN_LOCATION
 
 if TYPE_CHECKING:
     from homeassistant.core import HomeAssistant
@@ -57,6 +60,10 @@ async def _get_device_info(
         device_name, device_location = await client.get_device_info()
     except (DeviceConnectionError, DeviceAuthError) as err:
         _LOGGER.debug("Could not get device info from %s: %s", ip_address, err)
+        _LOGGER.debug("Trying to connect GNOME")
+        if converter := await async_setup_converter_gnome(client):
+            return (converter.conf.location, converter.conf.name)
+
         return None
 
     if device_name is None or device_location is None:
@@ -69,6 +76,9 @@ async def _get_device_info(
     elif connection_type == "network_hub":
         if not is_converter_supported(device_name):
             return None
+
+    if device_location == "":
+        device_location = UNKNOWN_LOCATION
 
     return (device_location, device_name)
 

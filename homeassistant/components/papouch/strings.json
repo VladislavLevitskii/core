@@ -4,6 +4,7 @@
       "already_configured": "This device is already configured, you can delete it from the integration and configure it again.",
       "cannot_connect": "Home Assistant can't connect to the device.",
       "converter_different_mode": "The converter is in different mode, please change its mode to TCP server.",
+      "invalid_response": "Invalid response from the device, check the logs for more information",
       "mode_is_missing": "The device didn't provide its current mode",
       "reauth_successful": "Re-authentication was successful",
       "reconfigure_successful": "Device reconfiguration was successful.",

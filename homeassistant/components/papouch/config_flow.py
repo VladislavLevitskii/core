@@ -772,8 +772,12 @@ class PapouchConfigFlow(ConfigFlow, domain=DOMAIN):
 
                 try:
                     mac_address = await client.get_device_mac()
-                except aiohttp.ClientError, DeviceLogicError:
+                except aiohttp.ClientError as err:
+                    _LOGGER.error(err)
                     return self.async_abort(reason="cannot_connect")
+                except DeviceLogicError as err:
+                    _LOGGER.error(err)
+                    return self.async_abort(reason="invalid_response")
 
                 formatted_mac = format_mac(mac_address)
                 await self.async_set_unique_id(formatted_mac)
@@ -793,7 +797,7 @@ class PapouchConfigFlow(ConfigFlow, domain=DOMAIN):
             }
 
             return self.async_create_entry(
-                title=device.conf.context or converter.conf.context,
+                title=title_name,
                 data=data,
                 options=options,
                 description="web_mode_success",
@@ -804,10 +808,13 @@ class PapouchConfigFlow(ConfigFlow, domain=DOMAIN):
         except (
             aiohttp.ClientError,
             DeviceConnectionError,
-            DeviceLogicError,
             TimeoutError,
-        ):
+        ) as err:
+            _LOGGER.error(err)
             return self.async_abort(reason="cannot_connect")
+        except DeviceLogicError as err:
+            _LOGGER.error(err)
+            return self.async_abort(reason="invalid_response")
 
     async def async_step_abort_switch(
         self,
