@@ -1,5 +1,7 @@
 """File contains helper functions that are used in various places."""
 
+import asyncio
+import contextlib
 from typing import TYPE_CHECKING, Any
 
 import aiohttp
@@ -69,10 +71,12 @@ async def _get_device_details(
     return {}, device_name, serial_number
 
 
-async def _get_next_available_address(
-    coordinator: PapouchSerialDataUpdateCoordinator, devices: list[dict[str, Any]]
-) -> int | None:
-    """Find the next available address from 0 to 253. Doesn't raise."""
+async def _assign_next_available_address(
+    coordinator: PapouchSerialDataUpdateCoordinator,
+    devices: list[dict[str, Any]],
+    serial_number: str,
+) -> tuple[int | None, str | None]:
+    """Finds, sets, and verifies the next available address. Returns (address, device_name)."""
 
     used_addresses = {device["address"] for device in devices}
 
@@ -80,15 +84,30 @@ async def _get_next_available_address(
         if addr in used_addresses:
             continue
 
-        try:
-            # we don't want any other device to have a new address
+        with contextlib.suppress(DeviceConnectionError):
             await coordinator.api_client.write_command(
                 addr, INST_INFO, context="", timeout=0.3
             )
-        except DeviceConnectionError:
-            return addr
+            continue
 
-    return None
+        try:
+            await coordinator.api_client.set_address(
+                addr, serial_number, f"device with {addr} for SN {serial_number}"
+            )
+
+            await asyncio.sleep(2)
+
+            temp_errors, device_name, _ = await _get_device_details(coordinator, addr)
+
+            if temp_errors:
+                continue
+
+        except DeviceConnectionError:
+            continue
+
+        return addr, device_name
+
+    return None, None
 
 
 async def _async_fetch_network_details(

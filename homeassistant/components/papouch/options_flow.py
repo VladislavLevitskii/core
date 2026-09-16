@@ -1,11 +1,10 @@
 """Options flow for the Papouch integration."""
 
-import asyncio
 import copy
+import logging
 from typing import Any
 
 from aiopapouch import is_device_supported
-from aiopapouch.exceptions import DeviceConnectionError
 import voluptuous as vol
 
 from homeassistant.config_entries import ConfigFlowResult, OptionsFlow
@@ -17,7 +16,9 @@ from homeassistant.helpers.selector import (
 
 from .const import DEFAULT_SCAN_INTERVAL
 from .coordinator import PapouchSerialDataUpdateCoordinator
-from .utils import _get_device_details, _get_next_available_address
+from .utils import _assign_next_available_address, _get_device_details
+
+_LOGGER = logging.getLogger()
 
 
 class PapouchOptionsFlowHandler(OptionsFlow):
@@ -192,30 +193,14 @@ class PapouchOptionsFlowHandler(OptionsFlow):
                 self.config_entry.runtime_data
             )
 
-            new_address = await _get_next_available_address(coordinator, self._devices)
+            new_address, device_name = await _assign_next_available_address(
+                coordinator, self._devices, serial_number
+            )
             if new_address is None:
                 errors["base"] = "no_free_addresses"
 
-            if not errors and new_address is not None:
-                try:
-                    await coordinator.api_client.set_address(
-                        new_address,
-                        serial_number,
-                        f"device with {new_address} for SN {serial_number}",
-                    )
-
-                    # some devices restart after settings a new address
-                    await asyncio.sleep(2)
-
-                    errors, device_name, _ = await _get_device_details(
-                        coordinator, new_address
-                    )
-
-                    if not is_device_supported(device_name, "serial"):
-                        errors["base"] = "unsupported_device"
-
-                except DeviceConnectionError:
-                    errors["base"] = "cannot_connect_broadcast"
+            elif device_name and not is_device_supported(device_name, "serial"):
+                errors["base"] = "unsupported_device"
 
             if not errors:
                 self._devices.append(
