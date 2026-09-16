@@ -61,6 +61,7 @@ class PapouchConfigFlow(ConfigFlow, domain=DOMAIN):
         self.discovered_name: str | None = None
         self._saved_input: dict | None = None
         self._discovered_ips: dict[str, str] | None = None
+        self._is_network_hub: bool = False
 
     async def _test_connection(
         self, ip_address: str, password: str = "", web_port: int = DEFAULT_WEB_PORT
@@ -91,26 +92,23 @@ class PapouchConfigFlow(ConfigFlow, domain=DOMAIN):
 
     async def _async_validate_network_hub(
         self, host: str, password: str, web_port: int
-    ) -> tuple[dict[str, str], str | None, str | None]:
-        """Test the connection to network hub and return (errors, title, unique_id)."""
+    ) -> tuple[dict[str, str], str | None, str | None, int | None]:
+        """Test the connection to network hub and return (errors, title, unique_id, device_mode)."""
         session = async_get_clientsession(self.hass)
         client = PapouchHTTPClient(host, session, password=password, web_port=web_port)
 
         try:
             converter = await create_converter(client)
             if converter is None:
-                return {"base": "unsupported_converter"}, None, None
+                return {"base": "unsupported_converter"}, None, None, None
 
             device_mode = await converter.get_mode()
-            if device_mode != 0:
-                return {"base": "converter_different_mode"}, None, None
-
             title = await _get_device_name(self.hass, host, password, web_port)
 
         except aiohttp.ClientError, DeviceConnectionError, TimeoutError:
-            return {"base": "cannot_connect"}, None, None
+            return {"base": "cannot_connect"}, None, None, None
 
-        return {}, title, converter.conf.identifier
+        return {}, title, converter.conf.identifier, device_mode
 
     async def _async_get_available_serial_ports(self) -> dict[str, str]:
         """Fetch available serial ports excluding already configured ones."""
@@ -478,11 +476,19 @@ class PapouchConfigFlow(ConfigFlow, domain=DOMAIN):
             web_port = user_input["web_port"]
             password = user_input.get("password", "")
 
-            errors, title, unique_id = await self._async_validate_network_hub(
-                host, password, web_port
-            )
+            (
+                errors,
+                title,
+                unique_id,
+                device_mode,
+            ) = await self._async_validate_network_hub(host, password, web_port)
 
             if not errors:
+                if device_mode != TCP_SERVER_MODE_INDEX:
+                    self._saved_input = user_input
+                    self._is_network_hub = True
+                    return await self.async_step_web_mode()
+
                 await self.async_set_unique_id(unique_id)
                 self._abort_if_unique_id_configured()
 
@@ -524,6 +530,9 @@ class PapouchConfigFlow(ConfigFlow, domain=DOMAIN):
         options_dict = self._discovered_ips.copy()
         options_dict["manual"] = "Enter IP manually"
 
+        if len(options_dict) == 1:
+            return await self.async_step_network_hub_manual()
+
         default_host = list(options_dict.keys())[0] if options_dict else "manual"
 
         schema = vol.Schema(
@@ -553,11 +562,19 @@ class PapouchConfigFlow(ConfigFlow, domain=DOMAIN):
             web_port = user_input["web_port"]
             password = user_input.get("password", "")
 
-            errors, title, unique_id = await self._async_validate_network_hub(
-                host, password, web_port
-            )
+            (
+                errors,
+                title,
+                unique_id,
+                device_mode,
+            ) = await self._async_validate_network_hub(host, password, web_port)
 
             if not errors:
+                if device_mode != TCP_SERVER_MODE_INDEX:
+                    self._saved_input = user_input
+                    self._is_network_hub = True
+                    return await self.async_step_web_mode()
+
                 await self.async_set_unique_id(unique_id)
                 self._abort_if_unique_id_configured()
 
@@ -674,8 +691,13 @@ class PapouchConfigFlow(ConfigFlow, domain=DOMAIN):
         user_input: dict[str, Any] | None = None,
     ) -> ConfigFlowResult:
         """Step where the user can switch the device into WEB mode via buttons."""
+
+        mode_name = "TCP server" if self._is_network_hub else "WEB"
+
         return self.async_show_menu(
-            step_id="web_mode", menu_options=["execute_switch", "abort_switch"]
+            step_id="web_mode",
+            menu_options=["execute_switch", "abort_switch"],
+            description_placeholders={"mode": mode_name},
         )
 
     async def async_step_execute_switch(
@@ -688,41 +710,67 @@ class PapouchConfigFlow(ConfigFlow, domain=DOMAIN):
 
         session = async_get_clientsession(self.hass)
         password = self._saved_input.get("password", "")
-        ip_address = self._saved_input["ip_address"]
+        address = (
+            self._saved_input["host"]
+            if self._is_network_hub
+            else self._saved_input["ip_address"]
+        )
         web_port = self._saved_input["web_port"]
 
         client = PapouchHTTPClient(
-            ip_address, session, password=password, web_port=web_port
+            address, session, password=password, web_port=web_port
         )
 
         try:
-            device = await create_network_device(client)
+            if self._is_network_hub:
+                converter = await create_converter(client)
+                if converter is None:
+                    return self.async_abort(reason="unsupported_device")
 
-            if device is None:
-                return self.async_abort(reason="unsupported_device")
+                await converter.switch_to_tcp_server()
+                _, title_name, unique_id, _ = await self._async_validate_network_hub(
+                    address, password, web_port
+                )
+                if not unique_id or not title_name:
+                    return self.async_abort(reason="cannot_connect")
 
-            await device.switch_to_web_mode()
+                await self.async_set_unique_id(unique_id)
+                self._abort_if_unique_id_configured()
 
-            title_name = await _get_device_name(
-                self.hass, ip_address, password, web_port
-            )
+                data = {
+                    "connection_type": "network_hub",
+                    "host": address,
+                    "baudrate": self._saved_input["baudrate"],
+                    "web_port": web_port,
+                    "password": password,
+                }
+            else:
+                device = await create_network_device(client)
+                if device is None:
+                    return self.async_abort(reason="unsupported_device")
 
-            try:
-                mac_address = await client.get_device_mac()
-            except aiohttp.ClientError, DeviceLogicError:
-                return self.async_abort(reason="cannot_connect")
+                await device.switch_to_web_mode()
 
-            if mac_address:
+                title_name = await _get_device_name(
+                    self.hass, address, password, web_port
+                )
+
+                try:
+                    mac_address = await client.get_device_mac()
+                except aiohttp.ClientError, DeviceLogicError:
+                    return self.async_abort(reason="cannot_connect")
+
                 formatted_mac = format_mac(mac_address)
                 await self.async_set_unique_id(formatted_mac)
                 self._abort_if_unique_id_configured()
 
-            data = {
-                "ip_address": ip_address,
-                "password": password,
-                "device_name": title_name,
-                "web_port": web_port,
-            }
+                data = {
+                    "ip_address": address,
+                    "password": password,
+                    "device_name": title_name,
+                    "web_port": web_port,
+                }
+
             options = {
                 "refresh_rate": self._saved_input.get(
                     "refresh_rate", DEFAULT_SCAN_INTERVAL
@@ -730,12 +778,20 @@ class PapouchConfigFlow(ConfigFlow, domain=DOMAIN):
             }
 
             return self.async_create_entry(
-                title=f"{title_name} - {ip_address}",
+                title=f"{title_name} - {address}",
                 data=data,
                 options=options,
                 description="web_mode_success",
+                description_placeholders={
+                    "mode": "TCP server" if self._is_network_hub else "WEB"
+                },
             )
-        except aiohttp.ClientError:
+        except (
+            aiohttp.ClientError,
+            DeviceConnectionError,
+            DeviceLogicError,
+            TimeoutError,
+        ):
             return self.async_abort(reason="cannot_connect")
 
     async def async_step_abort_switch(
@@ -893,11 +949,16 @@ class PapouchConfigFlow(ConfigFlow, domain=DOMAIN):
             web_port = user_input["web_port"]
             password = user_input.get("password", "")
 
-            errors, title, _ = await self._async_validate_network_hub(
+            errors, title, _, device_mode = await self._async_validate_network_hub(
                 host, password, web_port
             )
 
             if not errors:
+                if device_mode != TCP_SERVER_MODE_INDEX:
+                    self._saved_input = user_input
+                    self._is_network_hub = True
+                    return await self.async_step_web_mode()
+
                 self.hass.config_entries.async_update_entry(
                     entry,
                     data={
