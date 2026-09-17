@@ -843,7 +843,7 @@ class PapouchConfigFlow(ConfigFlow, domain=DOMAIN):
                 "web_port": web_port,
             }
 
-        return title_name, data, unique_id
+        return f"{title_name} - {address}", data, unique_id
 
     async def async_step_abort_switch(
         self,
