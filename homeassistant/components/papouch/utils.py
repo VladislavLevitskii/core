@@ -53,12 +53,14 @@ async def _get_device_name(
 
 async def _get_device_details(
     coordinator: PapouchSerialDataUpdateCoordinator, address: int
-) -> tuple[dict[str, str], str | None, str | None]:
+) -> tuple[dict[str, str], str | None, str | None, int | None]:
     """Test device connection and return errors, name, and serial number. Doesn't raise."""
     try:
         pkt_man_data = await coordinator.api_client.get_man_data(
             address, f"Unknown device with {address} address"
         )
+
+        _address = pkt_man_data.adr
 
         serial_number = parse_device_serial_number(pkt_man_data.data)
 
@@ -68,9 +70,9 @@ async def _get_device_details(
         device_name = parse_device_name(pkt_info.data)
 
     except DeviceConnectionError:
-        return {"base": "cannot_connect"}, None, None
+        return {"base": "cannot_connect"}, None, None, None
 
-    return {}, device_name, serial_number
+    return {}, device_name, serial_number, _address
 
 
 async def _assign_next_available_address(
@@ -100,7 +102,9 @@ async def _assign_next_available_address(
 
             await asyncio.sleep(2)
 
-            temp_errors, device_name, _ = await _get_device_details(coordinator, addr)
+            temp_errors, device_name, _, _ = await _get_device_details(
+                coordinator, addr
+            )
 
             if not temp_errors and device_name:
                 return addr, device_name

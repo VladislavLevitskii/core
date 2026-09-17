@@ -14,7 +14,7 @@ from homeassistant.helpers.selector import (
     NumberSelectorMode,
 )
 
-from .const import DEFAULT_SCAN_INTERVAL
+from .const import DEFAULT_SCAN_INTERVAL, SERIAL_BROADCAST_ADDRESS
 from .coordinator import PapouchSerialDataUpdateCoordinator
 from .utils import _assign_next_available_address, _get_device_details
 
@@ -70,15 +70,6 @@ class PapouchOptionsFlowHandler(OptionsFlow):
             menu_options=menu_options,
         )
 
-    async def async_step_add_device_menu(
-        self, user_input: dict[str, Any] | None = None
-    ) -> ConfigFlowResult:
-        """Menu to choose how to add a serial device."""
-        return self.async_show_menu(
-            step_id="add_device_menu",
-            menu_options=["add_device_by_address", "add_device_by_serial_number"],
-        )
-
     async def async_step_hub_settings(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
@@ -101,6 +92,19 @@ class PapouchOptionsFlowHandler(OptionsFlow):
 
         return self.async_show_form(step_id="hub_settings", data_schema=schema)
 
+    async def async_step_add_device_menu(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Menu to choose how to add a serial device."""
+        return self.async_show_menu(
+            step_id="add_device_menu",
+            menu_options=[
+                "add_device_by_address",
+                "add_device_by_serial_number",
+                "add_device_via_broadcast",
+            ],
+        )
+
     async def async_step_add_device_by_address(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
@@ -119,7 +123,7 @@ class PapouchOptionsFlowHandler(OptionsFlow):
                     errors["address"] = "address_already_used"
 
             if not errors:
-                errors, device_name, serial_number = await _get_device_details(
+                errors, device_name, serial_number, _ = await _get_device_details(
                     coordinator, address
                 )
 
@@ -233,6 +237,42 @@ class PapouchOptionsFlowHandler(OptionsFlow):
             step_id="add_device_by_serial_number",
             data_schema=schema,
             errors=errors,
+            description_placeholders={"device_name": device_name or ""},
+        )
+
+    async def async_step_add_device_via_broadcast(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Add a new serial device using broadcast."""
+
+        coordinator: PapouchSerialDataUpdateCoordinator = self.config_entry.runtime_data
+
+        errors, device_name, serial_number, new_address = await _get_device_details(
+            coordinator, SERIAL_BROADCAST_ADDRESS
+        )
+
+        for device in self._devices:
+            if new_address == device["address"]:
+                return self.async_abort(reason="broadcast_already_configured_device")
+
+        if errors:
+            return self.async_abort(reason="bus_multiple_devices")
+
+        self._devices.append(
+            {
+                "address": new_address,
+                "serial_number": serial_number,
+                "name": device_name,
+            }
+        )
+
+        new_options = {
+            **self.config_entry.options,
+            "devices": self._devices,
+        }
+        return self.async_create_entry(
+            title="",
+            data=new_options,
             description_placeholders={"device_name": device_name or ""},
         )
 

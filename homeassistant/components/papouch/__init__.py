@@ -19,7 +19,13 @@ from homeassistant.exceptions import ConfigEntryAuthFailed, ConfigEntryNotReady
 from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
-from .const import DEFAULT_WEB_PORT, DOMAIN, UNKNOWN_LOCATION, UNKNOWN_NAME
+from .const import (
+    DEFAULT_WEB_PORT,
+    DOMAIN,
+    SERIAL_BROADCAST_ADDRESS,
+    UNKNOWN_LOCATION,
+    UNKNOWN_NAME,
+)
 from .coordinator import (
     PapouchBaseCoordinator,
     PapouchNetworkDataUpdateCoordinator,
@@ -215,7 +221,9 @@ async def _async_setup_tcp_entry(
         ) from err
 
     try:
-        device = await create_serial_device(serial_client, address=0xFE)
+        device = await create_serial_device(
+            serial_client, address=SERIAL_BROADCAST_ADDRESS
+        )
     except DeviceConnectionError as err:
         raise ConfigEntryNotReady(
             translation_domain=DOMAIN,

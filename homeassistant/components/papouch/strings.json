@@ -383,6 +383,10 @@
     }
   },
   "options": {
+    "abort": {
+      "broadcast_already_configured_device": "A device that is the only one on the bus is already configured.",
+      "bus_multiple_devices": "There are more devices connected to the bus."
+    },
     "error": {
       "address_already_used": "This address is already in use by another device.",
       "assign_failed": "The device did not respond after multiple attempts. Please verify that the Serial Number is correct, the device is powered on, and connected to the bus.",
@@ -418,9 +422,14 @@
         "description": "How do you want to add the new device?",
         "menu_options": {
           "add_device_by_address": "By Address",
-          "add_device_by_serial_number": "By Serial Number"
+          "add_device_by_serial_number": "By Serial Number",
+          "add_device_via_broadcast": "Via Broadcast"
         },
         "title": "Add Device"
+      },
+      "add_device_via_broadcast": {
+        "description": "WARNING: Be aware that using broadcast while there are multiple devices on the bus leads to connection errors.",
+        "title": "Add Device via broadcast."
       },
       "hub_settings": {
         "data": {
