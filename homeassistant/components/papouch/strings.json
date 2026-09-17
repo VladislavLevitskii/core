@@ -385,6 +385,7 @@
   "options": {
     "error": {
       "address_already_used": "This address is already in use by another device.",
+      "assign_failed": "The device did not respond after multiple attempts. Please verify that the Serial Number is correct, the device is powered on, and connected to the bus.",
       "cannot_connect": "Cannot connect to the device at the given address.",
       "cannot_connect_broadcast": "Cannot connect to the device via broadcast.",
       "invalid_serial_format": "Invalid format. The serial number must contain a slash (e.g. 0123/4567).",

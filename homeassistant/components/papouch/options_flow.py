@@ -123,7 +123,7 @@ class PapouchOptionsFlowHandler(OptionsFlow):
                     coordinator, address
                 )
 
-                if not is_device_supported(device_name, "serial"):
+                if not errors and not is_device_supported(device_name, "serial"):
                     errors["base"] = "unsupported_device"
 
             if not errors and serial_number and device_name:
@@ -196,10 +196,12 @@ class PapouchOptionsFlowHandler(OptionsFlow):
             new_address, device_name = await _assign_next_available_address(
                 coordinator, self._devices, serial_number
             )
+
             if new_address is None:
                 errors["base"] = "no_free_addresses"
-
-            elif device_name and not is_device_supported(device_name, "serial"):
+            elif device_name is None:
+                errors["base"] = "assign_failed"
+            elif not is_device_supported(device_name, "serial"):
                 errors["base"] = "unsupported_device"
 
             if not errors:

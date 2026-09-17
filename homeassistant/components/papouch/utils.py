@@ -23,6 +23,8 @@ from .coordinator import PapouchSerialDataUpdateCoordinator
 if TYPE_CHECKING:
     from homeassistant.core import HomeAssistant
 
+MAX_ATTEMPTS_ASSIGNING = 3
+
 
 async def _get_device_name(
     hass: HomeAssistant,
@@ -79,6 +81,7 @@ async def _assign_next_available_address(
     """Finds, sets, and verifies the next available address. Returns (address, device_name)."""
 
     used_addresses = {device["address"] for device in devices}
+    failed_attempts = 0
 
     for addr in range(250, -1, -1):
         if addr in used_addresses:
@@ -99,13 +102,15 @@ async def _assign_next_available_address(
 
             temp_errors, device_name, _ = await _get_device_details(coordinator, addr)
 
-            if temp_errors:
-                continue
+            if not temp_errors and device_name:
+                return addr, device_name
 
         except DeviceConnectionError:
-            continue
+            pass
 
-        return addr, device_name
+        failed_attempts += 1
+        if failed_attempts >= MAX_ATTEMPTS_ASSIGNING:
+            return addr, None
 
     return None, None
 
