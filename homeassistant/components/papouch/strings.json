@@ -8,12 +8,13 @@
       "mode_is_missing": "The device didn't provide its current mode",
       "reauth_successful": "Re-authentication was successful",
       "reconfigure_successful": "Device reconfiguration was successful.",
+      "unreachable": "This error shouldn't be triggered. Unreachable code in config flow.",
       "unsupported_device": "This device is unsupported.",
       "web_mode_required": "The integration requires the device to be in WEB mode or TCP server to function."
     },
     "create_entry": {
       "default": "The device has been successfully configured.",
-      "web_mode_success": "The device was successfully switched to {mode} mode. Please wait 10 seconds while the device restarts."
+      "web_mode_success": "The device was successfully switched to {mode} mode."
     },
     "error": {
       "cannot_connect": "Failed to connect to the device.",
@@ -23,6 +24,9 @@
       "unsupported_converter": "This converter is unsupported. Please check if this IP belongs to the converter and not some other device."
     },
     "flow_title": "{name}",
+    "progress": {
+      "restarting_device": "Changing the mode and restarting the device. Please wait..."
+    },
     "step": {
       "discovery_confirm": {
         "data": {
@@ -37,6 +41,9 @@
         },
         "description": "Do you want to add {name} to Home Assistant?",
         "title": "Add {name}"
+      },
+      "execute_switch": {
+        "title": "Restarting Device"
       },
       "manual": {
         "data": {
@@ -202,7 +209,7 @@
         "title": "Select Connection Type"
       },
       "web_mode": {
-        "description": "The device is currently not in {mode} mode. Do you want to switch it to {mode} mode?",
+        "description": "The device is currently not in {mode} mode. Do you want to switch it to {mode} mode? Please note that this action may take 15-30 seconds.",
         "menu_options": {
           "abort_switch": "Cancel",
           "execute_switch": "Switch mode"
