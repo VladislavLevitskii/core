@@ -1,39 +1,25 @@
 """File contains helper functions that are used in various places."""
 
-import asyncio
-import contextlib
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 import aiohttp
-from aiopapouch import PapouchHTTPClient, parse_device_name, parse_device_serial_number
-from aiopapouch.exceptions import (
-    DeviceAuthError,
-    DeviceConnectionError,
-    DeviceLogicError,
-)
-from pap_spinel import INST_INFO
+from aiopapouch import PapouchHTTPClient
+from aiopapouch.exceptions import DeviceAuthError, DeviceLogicError
 import voluptuous as vol
 
-from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.device_registry import format_mac
 
 from .const import DEFAULT_SCAN_INTERVAL, DEFAULT_WEB_PORT
-from .coordinator import PapouchSerialDataUpdateCoordinator
-
-if TYPE_CHECKING:
-    from homeassistant.core import HomeAssistant
-
-MAX_ATTEMPTS_ASSIGNING = 3
 
 
 async def _get_device_name(
-    hass: HomeAssistant,
+    session: aiohttp.ClientSession,
     ip_address: str,
     password: str = "",
     web_port: int = DEFAULT_WEB_PORT,
 ) -> str:
     """Fetch the real device name and location directly from the device. Doesn't raise."""
-    session = async_get_clientsession(hass)
+
     client = PapouchHTTPClient(
         ip_address, session, password=password, web_port=web_port
     )
@@ -51,76 +37,8 @@ async def _get_device_name(
     return "Papouch Device - (NONAME)"
 
 
-async def _get_device_details(
-    coordinator: PapouchSerialDataUpdateCoordinator, address: int
-) -> tuple[dict[str, str], str | None, str | None, int | None]:
-    """Test device connection and return errors, name, and serial number. Doesn't raise."""
-    try:
-        pkt_man_data = await coordinator.api_client.get_man_data(
-            address, f"Unknown device with {address} address"
-        )
-
-        _address = pkt_man_data.adr
-
-        serial_number = parse_device_serial_number(pkt_man_data.data)
-
-        pkt_info = await coordinator.api_client.get_info(
-            address, f"Device at address {address}"
-        )
-        device_name = parse_device_name(pkt_info.data)
-
-    except DeviceConnectionError:
-        return {"base": "cannot_connect"}, None, None, None
-
-    return {}, device_name, serial_number, _address
-
-
-async def _assign_next_available_address(
-    coordinator: PapouchSerialDataUpdateCoordinator,
-    devices: list[dict[str, Any]],
-    serial_number: str,
-) -> tuple[int | None, str | None]:
-    """Finds, sets, and verifies the next available address. Returns (address, device_name)."""
-
-    used_addresses = {device["address"] for device in devices}
-    failed_attempts = 0
-
-    for addr in range(250, -1, -1):
-        if addr in used_addresses:
-            continue
-
-        with contextlib.suppress(DeviceConnectionError):
-            await coordinator.api_client.write_command(
-                addr, INST_INFO, context="", timeout=0.3
-            )
-            continue
-
-        try:
-            await coordinator.api_client.set_address(
-                addr, serial_number, f"device with {addr} for SN {serial_number}"
-            )
-
-            await asyncio.sleep(2)
-
-            temp_errors, device_name, _, _ = await _get_device_details(
-                coordinator, addr
-            )
-
-            if not temp_errors and device_name:
-                return addr, device_name
-
-        except DeviceConnectionError:
-            pass
-
-        failed_attempts += 1
-        if failed_attempts >= MAX_ATTEMPTS_ASSIGNING:
-            return addr, None
-
-    return None, None
-
-
 async def _async_fetch_network_details(
-    hass: HomeAssistant,
+    session: aiohttp.ClientSession,
     client: PapouchHTTPClient,
     ip_address: str,
     password: str,
@@ -138,7 +56,7 @@ async def _async_fetch_network_details(
 
     formatted_mac = format_mac(mac_address)
 
-    title_name = await _get_device_name(hass, ip_address, password)
+    title_name = await _get_device_name(session, ip_address, password)
 
     return errors, title_name, formatted_mac
 

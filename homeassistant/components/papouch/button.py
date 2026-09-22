@@ -105,7 +105,9 @@ class PapouchCommandButton(PapouchEntity, ButtonEntity):
         """Initialize the button."""
         super().__init__(coordinator, device)
         self.entity_description = description
-        self._attr_unique_id = f"{self.device.identifier}_btn_{description.cmd_type}"
+        self._attr_unique_id = (
+            f"{self.device.conf.identifier}_btn_{description.cmd_type}"
+        )
 
         if description.translation_placeholders:
             self._attr_translation_placeholders = description.translation_placeholders
@@ -119,21 +121,21 @@ class PapouchCommandButton(PapouchEntity, ButtonEntity):
         except aiopapouch_exceptions.DeviceAuthError as err:
             raise PapouchAuthError(
                 translation_placeholders={
-                    "name": self.device.name,
-                    "location": self.device.location,
+                    "name": self.device.conf.name,
+                    "location": self.device.conf.location,
                 }
             ) from err
         except aiopapouch_exceptions.DeviceConnectionError as err:
             raise PapouchConnectionError(
                 translation_placeholders={
-                    "name": self.device.name,
-                    "location": self.device.location,
+                    "name": self.device.conf.name,
+                    "location": self.device.conf.location,
                 }
             ) from err
         except aiopapouch_exceptions.DeviceError as err:
             raise PapouchCommandError(
                 translation_placeholders={
                     "cmd": self.entity_description.cmd_type,
-                    "name": self.device.name,
+                    "name": self.device.conf.name,
                 }
             ) from err

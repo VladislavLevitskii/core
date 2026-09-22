@@ -90,7 +90,7 @@ class PapouchSwitch(PapouchEntity, SwitchEntity):
         """Initialize the switch."""
         super().__init__(coordinator, device)
         self.entity_description = description
-        self._attr_unique_id = f"{self.device.identifier}_{description.item_id}"
+        self._attr_unique_id = f"{self.device.conf.identifier}_{description.item_id}"
 
         if description.translation_placeholders:
             self._attr_translation_placeholders = description.translation_placeholders
@@ -100,7 +100,7 @@ class PapouchSwitch(PapouchEntity, SwitchEntity):
     def is_on(self) -> bool | None:
         """Return True if the switch is on."""
 
-        device_data = self.coordinator.data.get(self.device.identifier, {})
+        device_data = self.coordinator.data.get(self.device.conf.identifier, {})
 
         val = device_data.get("switch", {}).get(self.entity_description.item_id)
         return val == 1 if val is not None else None
@@ -113,26 +113,26 @@ class PapouchSwitch(PapouchEntity, SwitchEntity):
         except aiopapouch_exceptions.DeviceAuthError as err:
             raise PapouchAuthError(
                 translation_placeholders={
-                    "name": self.device.name,
-                    "location": self.device.location,
+                    "name": self.device.conf.name,
+                    "location": self.device.conf.location,
                 }
             ) from err
         except aiopapouch_exceptions.DeviceConnectionError as err:
             raise PapouchConnectionError(
                 translation_placeholders={
-                    "name": self.device.name,
-                    "location": self.device.location,
+                    "name": self.device.conf.name,
+                    "location": self.device.conf.location,
                 }
             ) from err
         except aiopapouch_exceptions.DeviceError as err:
             raise PapouchCommandError(
                 translation_placeholders={
                     "cmd": f"turn_on_switch_{self.entity_description.item_id}",
-                    "name": self.device.name,
+                    "name": self.device.conf.name,
                 }
             ) from err
 
-        device_data = self.coordinator.data.get(self.device.identifier, {})
+        device_data = self.coordinator.data.get(self.device.conf.identifier, {})
 
         if device_data and "switch" in device_data:
             device_data["switch"][self.entity_description.item_id] = 1
@@ -147,26 +147,26 @@ class PapouchSwitch(PapouchEntity, SwitchEntity):
         except aiopapouch_exceptions.DeviceAuthError as err:
             raise PapouchAuthError(
                 translation_placeholders={
-                    "name": self.device.name,
-                    "location": self.device.location,
+                    "name": self.device.conf.name,
+                    "location": self.device.conf.location,
                 }
             ) from err
         except aiopapouch_exceptions.DeviceConnectionError as err:
             raise PapouchConnectionError(
                 translation_placeholders={
-                    "name": self.device.name,
-                    "location": self.device.location,
+                    "name": self.device.conf.name,
+                    "location": self.device.conf.location,
                 }
             ) from err
         except aiopapouch_exceptions.DeviceError as err:
             raise PapouchCommandError(
                 translation_placeholders={
                     "cmd": f"turn_off_switch_{self.entity_description.item_id}",
-                    "name": self.device.name,
+                    "name": self.device.conf.name,
                 }
             ) from err
 
-        device_data = self.coordinator.data.get(self.device.identifier, {})
+        device_data = self.coordinator.data.get(self.device.conf.identifier, {})
 
         if device_data and "switch" in device_data:
             device_data["switch"][self.entity_description.item_id] = 0

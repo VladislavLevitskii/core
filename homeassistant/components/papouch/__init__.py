@@ -91,18 +91,18 @@ async def _async_setup_network_entry(
             translation_placeholders={"name": safe_name, "location": safe_location},
         )
 
-    if entry.unique_id is None and device.identifier:
-        hass.config_entries.async_update_entry(entry, unique_id=device.identifier)
+    if entry.unique_id is None and device.conf.identifier:
+        hass.config_entries.async_update_entry(entry, unique_id=device.conf.identifier)
 
     device_registry = dr.async_get(hass)
     device_registry.async_get_or_create(
         config_entry_id=entry.entry_id,
-        connections={(dr.CONNECTION_NETWORK_MAC, device.identifier)},
-        identifiers={(DOMAIN, device.identifier)},
-        name=device.name,
-        manufacturer=device.manufacturer,
-        model=device.name,
-        suggested_area=device.location,
+        connections={(dr.CONNECTION_NETWORK_MAC, device.conf.identifier)},
+        identifiers={(DOMAIN, device.conf.identifier)},
+        name=device.conf.name,
+        manufacturer=device.conf.manufacturer,
+        model=device.conf.name,
+        suggested_area=device.conf.location,
     )
 
     return PapouchNetworkDataUpdateCoordinator(hass, api_client, entry, device)
@@ -158,15 +158,17 @@ async def _async_setup_hub_devices(
 
         if device:
             devices.append(device)
-            location_stripped = device.location.strip() if device.location else ""
+            location_stripped = (
+                device.conf.location.strip() if device.conf.location else ""
+            )
             device_location = location_stripped or UNKNOWN_LOCATION
 
             device_registry.async_get_or_create(
                 config_entry_id=entry.entry_id,
-                identifiers={(DOMAIN, device.identifier)},
-                name=f"{device.name} (Address {address})",
-                manufacturer=device.manufacturer,
-                model=device.name,
+                identifiers={(DOMAIN, device.conf.identifier)},
+                name=f"{device.conf.name} (Address {address})",
+                manufacturer=device.conf.manufacturer,
+                model=device.conf.name,
                 serial_number=serial_number,
                 suggested_area=device_location,
             )
@@ -248,8 +250,8 @@ async def _async_setup_tcp_entry(
             translation_domain=DOMAIN,
             translation_key="cannot_connect_http",
             translation_placeholders={
-                "name": device.name,
-                "location": device.location,
+                "name": device.conf.name,
+                "location": device.conf.location,
             },
         ) from err
 
@@ -260,10 +262,10 @@ async def _async_setup_tcp_entry(
         config_entry_id=entry.entry_id,
         connections={(dr.CONNECTION_NETWORK_MAC, mac_address)},
         identifiers={(DOMAIN, mac_address)},
-        name=device.name,
-        manufacturer=device.manufacturer,
-        model=device.name,
-        suggested_area=device.location or UNKNOWN_LOCATION,
+        name=device.conf.name,
+        manufacturer=device.conf.manufacturer,
+        model=device.conf.name,
+        suggested_area=device.conf.location or UNKNOWN_LOCATION,
     )
 
     return PapouchSerialDataUpdateCoordinator(hass, serial_client, entry, [device])

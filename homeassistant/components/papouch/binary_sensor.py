@@ -96,9 +96,7 @@ class PapouchBinarySensor(PapouchEntity, BinarySensorEntity):
         """Initialize the binary sensor."""
         super().__init__(coordinator, device)
         self.entity_description = description
-        self._attr_unique_id = (
-            f"{self.device.identifier}_{description.data_key}_{description.item_id}"
-        )
+        self._attr_unique_id = f"{self.device.conf.identifier}_{description.data_key}_{description.item_id}"
 
         if description.translation_placeholders:
             self._attr_translation_placeholders = description.translation_placeholders
@@ -107,7 +105,7 @@ class PapouchBinarySensor(PapouchEntity, BinarySensorEntity):
     @override
     def is_on(self) -> bool:
         """Return True if the binary sensor is on."""
-        device_data = self.coordinator.data.get(self.device.identifier, {})
+        device_data = self.coordinator.data.get(self.device.conf.identifier, {})
         return bool(
             device_data.get(self.entity_description.data_key, {}).get(
                 self.entity_description.item_id

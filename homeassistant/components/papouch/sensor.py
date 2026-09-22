@@ -166,9 +166,7 @@ class PapouchSensor(PapouchEntity, SensorEntity):
         """Initialize the sensor."""
         super().__init__(coordinator, device)
         self.entity_description = description
-        self._attr_unique_id = (
-            f"{self.device.identifier}_{description.data_key}_{description.value_key}"
-        )
+        self._attr_unique_id = f"{self.device.conf.identifier}_{description.data_key}_{description.value_key}"
 
         if description.translation_placeholders:
             self._attr_translation_placeholders = description.translation_placeholders
@@ -178,7 +176,7 @@ class PapouchSensor(PapouchEntity, SensorEntity):
     def native_value(self) -> float | int | None:
         """Return the state of the sensor."""
 
-        device_data = self.coordinator.data[self.device.identifier]
+        device_data = self.coordinator.data[self.device.conf.identifier]
 
         value = device_data.get(self.entity_description.data_key, {}).get(
             self.entity_description.value_key

@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING, Any, override
 import aiohttp
 from aiopapouch import (
     PapouchHTTPClient,
+    async_discover_papouch_devices,
     create_converter,
     create_network_device,
     is_device_supported,
@@ -37,7 +38,6 @@ from .const import (
     UDP_MODE_INDEX,
     WEB_MODE_INDEX,
 )
-from .discovery import async_discover_papouch_devices
 from .options_flow import PapouchOptionsFlowHandler
 from .utils import _async_fetch_network_details, _get_device_name, _get_network_schema
 
@@ -162,7 +162,7 @@ class PapouchConfigFlow(ConfigFlow, domain=DOMAIN):
         )
 
         errors, title_name, mac_address = await _async_fetch_network_details(
-            self.hass, client, ip_address, password, errors
+            session, client, ip_address, password, errors
         )
 
         if errors:
@@ -234,8 +234,10 @@ class PapouchConfigFlow(ConfigFlow, domain=DOMAIN):
         for entry in self._async_current_entries():
             if entry.unique_id == discovered_mac:
                 if entry.data.get("ip_address") != self.discovered_ip:
+                    session = async_get_clientsession(self.hass)
+
                     new_name = await _get_device_name(
-                        self.hass,
+                        session,
                         self.discovered_ip,
                         entry.data.get("password", ""),
                         entry.data.get("web_port", DEFAULT_WEB_PORT),
@@ -364,7 +366,8 @@ class PapouchConfigFlow(ConfigFlow, domain=DOMAIN):
                 return result
 
         if self._discovered_ips is None:
-            results = await async_discover_papouch_devices(self.hass, "network")
+            session = async_get_clientsession(self.hass)
+            results = await async_discover_papouch_devices(session, "network")
 
             configured_ips = {
                 entry.data.get("ip_address")
@@ -519,8 +522,9 @@ class PapouchConfigFlow(ConfigFlow, domain=DOMAIN):
                 )
 
         if self._discovered_ips is None:
+            session = async_get_clientsession(self.hass)
             results = await async_discover_papouch_devices(
-                self.hass, connection_type="network_hub"
+                session, connection_type="network_hub"
             )
 
             configured_hosts = {
@@ -826,7 +830,7 @@ class PapouchConfigFlow(ConfigFlow, domain=DOMAIN):
 
             await device.switch_to_web_mode()
 
-            title_name = await _get_device_name(self.hass, address, password, web_port)
+            title_name = await _get_device_name(session, address, password, web_port)
 
             try:
                 mac_address = await client.get_device_mac()
@@ -936,8 +940,10 @@ class PapouchConfigFlow(ConfigFlow, domain=DOMAIN):
             )
 
             if not errors:
+                session = async_get_clientsession(self.hass)
+
                 new_name = await _get_device_name(
-                    self.hass,
+                    session,
                     user_input["ip_address"],
                     user_input.get("password", ""),
                     user_input.get("web_port", DEFAULT_WEB_PORT),

@@ -5,6 +5,8 @@ import logging
 from typing import Any
 
 from aiopapouch import is_device_supported
+from aiopapouch.exceptions import DeviceConnectionError
+from aiopapouch.utils import _get_device_details, assign_next_available_address
 import voluptuous as vol
 
 from homeassistant.config_entries import ConfigFlowResult, OptionsFlow
@@ -16,7 +18,6 @@ from homeassistant.helpers.selector import (
 
 from .const import DEFAULT_SCAN_INTERVAL, SERIAL_BROADCAST_ADDRESS
 from .coordinator import PapouchSerialDataUpdateCoordinator
-from .utils import _assign_next_available_address, _get_device_details
 
 _LOGGER = logging.getLogger()
 
@@ -123,14 +124,17 @@ class PapouchOptionsFlowHandler(OptionsFlow):
                     errors["address"] = "address_already_used"
 
             if not errors:
-                errors, device_name, serial_number, _ = await _get_device_details(
-                    coordinator, address
-                )
+                try:
+                    device_name, serial_number, _ = await _get_device_details(
+                        coordinator.api_client, address
+                    )
+                except DeviceConnectionError:
+                    errors["base"] = "cannot_connect"
 
                 if not errors and not is_device_supported(device_name, "serial"):
                     errors["base"] = "unsupported_device"
 
-            if not errors and serial_number and device_name:
+            if not errors:
                 for device in self._devices:
                     if device["serial_number"] == serial_number:
                         errors["base"] = "serial_already_used"
@@ -197,8 +201,10 @@ class PapouchOptionsFlowHandler(OptionsFlow):
                 self.config_entry.runtime_data
             )
 
-            new_address, device_name = await _assign_next_available_address(
-                coordinator, self._devices, serial_number
+            used_addresses: list[int] = [d["address"] for d in self._devices]
+
+            new_address, device_name = await assign_next_available_address(
+                coordinator.api_client, used_addresses, serial_number
             )
 
             if new_address is None:
@@ -245,11 +251,16 @@ class PapouchOptionsFlowHandler(OptionsFlow):
     ) -> ConfigFlowResult:
         """Add a new serial device using broadcast."""
 
+        errors: dict[str, str] = {}
+
         coordinator: PapouchSerialDataUpdateCoordinator = self.config_entry.runtime_data
 
-        errors, device_name, serial_number, new_address = await _get_device_details(
-            coordinator, SERIAL_BROADCAST_ADDRESS
-        )
+        try:
+            device_name, serial_number, new_address = await _get_device_details(
+                coordinator.api_client, SERIAL_BROADCAST_ADDRESS
+            )
+        except DeviceConnectionError:
+            errors["base"] = "cannot_connect"
 
         for device in self._devices:
             if new_address == device["address"]:
