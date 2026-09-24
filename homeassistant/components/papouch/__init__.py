@@ -11,7 +11,7 @@ from aiopapouch import (
     create_serial_device,
 )
 from aiopapouch.exceptions import DeviceConnectionError
-from pap_spinel import SerialTransport, SpinelClient, SpinelTransportError, TcpTransport
+from pap_spinel import SerialTransport, SpinelTransportError, TcpTransport
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import Platform
@@ -189,7 +189,7 @@ async def _async_setup_serial_entry(
     baudrate = entry.data["baudrate"]
     transport = SerialTransport(port, baudrate)
 
-    serial_client = PapouchSerialClient(SpinelClient(transport))
+    serial_client = PapouchSerialClient(transport)
 
     try:
         await serial_client.open()
@@ -211,7 +211,7 @@ async def _async_setup_tcp_entry(
     host = entry.data["host"]
     port = entry.data["port"]
 
-    serial_client = PapouchSerialClient(SpinelClient(TcpTransport(host, port)))
+    serial_client = PapouchSerialClient(TcpTransport(host, port))
 
     try:
         await serial_client.open()
@@ -278,7 +278,7 @@ async def _async_setup_network_hub_entry(
     tcp_port = entry.data["tcp_port"]
 
     transport = TcpTransport(host, tcp_port)
-    serial_client = PapouchSerialClient(SpinelClient(transport))
+    serial_client = PapouchSerialClient(transport)
 
     try:
         await serial_client.open()
