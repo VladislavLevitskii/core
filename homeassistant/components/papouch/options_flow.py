@@ -97,13 +97,18 @@ class PapouchOptionsFlowHandler(OptionsFlow):
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
         """Menu to choose how to add a serial device."""
+
+        menu_options = [
+            "add_device_by_address",
+            "add_device_by_serial_number",
+        ]
+
+        if not self._devices:
+            menu_options.append("add_device_via_broadcast")
+
         return self.async_show_menu(
             step_id="add_device_menu",
-            menu_options=[
-                "add_device_by_address",
-                "add_device_by_serial_number",
-                "add_device_via_broadcast",
-            ],
+            menu_options=menu_options,
         )
 
     async def async_step_add_device_by_address(
