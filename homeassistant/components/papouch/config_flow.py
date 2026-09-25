@@ -383,7 +383,7 @@ class PapouchConfigFlow(ConfigFlow, domain=DOMAIN):
             self._discovered_ips = {}
 
             for ip in sorted_ips:
-                location, name = filtered_results[ip]
+                name, location = filtered_results[ip]
                 self._discovered_ips[ip] = f"{ip} - {name} ({location})"
 
         if not self._discovered_ips and not self.discovered_ip and not errors:
@@ -537,7 +537,7 @@ class PapouchConfigFlow(ConfigFlow, domain=DOMAIN):
             }
             self._discovered_ips = {
                 ip: f"{ip} - {name} ({location})"
-                for ip, (location, name) in filtered_results.items()
+                for ip, (name, location) in filtered_results.items()
             }
 
         options_dict = self._discovered_ips.copy()
