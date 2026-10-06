@@ -6,7 +6,7 @@ from typing import Any
 
 from aiopapouch import is_device_supported
 from aiopapouch.exceptions import DeviceConnectionError
-from aiopapouch.utils import _get_device_details, assign_next_available_address
+from aiopapouch.utils import assign_next_available_address, get_device_details
 import voluptuous as vol
 
 from homeassistant.config_entries import ConfigFlowResult, OptionsFlow
@@ -130,7 +130,7 @@ class PapouchOptionsFlowHandler(OptionsFlow):
 
             if not errors:
                 try:
-                    device_name, serial_number, _ = await _get_device_details(
+                    device_name, serial_number, _ = await get_device_details(
                         coordinator.api_client, address
                     )
                 except DeviceConnectionError:
@@ -261,7 +261,7 @@ class PapouchOptionsFlowHandler(OptionsFlow):
         coordinator: PapouchSerialDataUpdateCoordinator = self.config_entry.runtime_data
 
         try:
-            device_name, serial_number, new_address = await _get_device_details(
+            device_name, serial_number, new_address = await get_device_details(
                 coordinator.api_client, SERIAL_BROADCAST_ADDRESS
             )
         except DeviceConnectionError:
