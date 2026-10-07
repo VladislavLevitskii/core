@@ -385,7 +385,7 @@
   "options": {
     "abort": {
       "broadcast_already_configured_device": "A device that is the only one on the bus is already configured.",
-      "bus_multiple_devices": "There are more devices connected to the bus."
+      "bus_multiple_devices": "There are 0 or more than 2 devices connected to the bus."
     },
     "error": {
       "address_already_used": "This address is already in use by another device.",
@@ -448,6 +448,9 @@
           "refresh_rate": "How often Home Assistant should poll the device for new data."
         }
       },
+      "remove_all_devices": {
+        "title": "Remove Every Device"
+      },
       "remove_device": {
         "data": {
           "device": "Select device to remove"
@@ -461,6 +464,7 @@
         "menu_options": {
           "add_device_menu": "Add a new device",
           "hub_settings": "Hub settings",
+          "remove_all_devices": "Remove all the devices",
           "remove_device": "Remove a device"
         },
         "title": "Serial Hub Options"

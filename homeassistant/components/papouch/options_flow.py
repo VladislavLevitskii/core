@@ -64,6 +64,7 @@ class PapouchOptionsFlowHandler(OptionsFlow):
         menu_options = ["add_device_menu", "hub_settings"]
 
         if self._devices:
+            menu_options.insert(1, "remove_all_devices")
             menu_options.insert(1, "remove_device")
 
         return self.async_show_menu(
@@ -331,3 +332,21 @@ class PapouchOptionsFlowHandler(OptionsFlow):
         )
 
         return self.async_show_form(step_id="remove_device", data_schema=schema)
+
+    async def async_step_remove_all_devices(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Remove all the devices from the hub."""
+        if not self._devices:
+            return await self.async_step_serial_menu()
+
+        new_options = {
+            **self.config_entry.options,
+            "devices": [],
+        }
+
+        self.hass.async_create_task(
+            self.hass.config_entries.async_reload(self.config_entry.entry_id)
+        )
+
+        return self.async_create_entry(title="", data=new_options)
