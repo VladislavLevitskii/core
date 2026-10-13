@@ -104,7 +104,7 @@ class PapouchConfigFlow(ConfigFlow, domain=DOMAIN):
                 return {"base": "unsupported_converter"}, None, None, None, None
 
             device_mode = await converter.get_mode()
-            title = f"{converter.conf.context} - {(client.ip_address)}"
+            title = f"{converter.conf.context} - {converter.conf.identifier}"
 
         except aiohttp.ClientError, DeviceConnectionError, TimeoutError:
             return {"base": "cannot_connect"}, None, None, None, None
@@ -161,14 +161,16 @@ class PapouchConfigFlow(ConfigFlow, domain=DOMAIN):
             ip_address, session, password=password, web_port=web_port
         )
 
-        errors, title_name, mac_address = await _async_fetch_network_details(
+        errors, device_name, mac_address = await _async_fetch_network_details(
             session, client, ip_address, password, errors
         )
 
         if errors:
             return errors, None
 
-        if mode_device is None or title_name is None or mac_address is None:
+        title = f"{device_name}: IP: {ip_address}, MAC: {mac_address}"
+
+        if mode_device is None or device_name is None or mac_address is None:
             # errors shouldn't be empty -> `if errors` should trigger and return
             # mypy fix
             return {}, self.async_abort(reason="unreachable")
@@ -180,14 +182,14 @@ class PapouchConfigFlow(ConfigFlow, domain=DOMAIN):
 
             data = {
                 "connection_type": "tcp",
-                "host": user_input["ip_address"],
+                "host": ip_address,
                 "port": tcp_port,
             }
             options = {
                 "refresh_rate": user_input.get("refresh_rate", DEFAULT_SCAN_INTERVAL)
             }
             return {}, self.async_create_entry(
-                title=f"{title_name} - {user_input['ip_address']}",
+                title=title,
                 data=data,
                 options=options,
             )
@@ -206,9 +208,9 @@ class PapouchConfigFlow(ConfigFlow, domain=DOMAIN):
 
         data = {
             "connection_type": "network",
-            "ip_address": user_input["ip_address"],
+            "ip_address": ip_address,
             "password": password,
-            "device_name": title_name,
+            "device_name": device_name,
             "web_port": web_port,
         }
         options = {
@@ -216,7 +218,7 @@ class PapouchConfigFlow(ConfigFlow, domain=DOMAIN):
         }
 
         return {}, self.async_create_entry(
-            title=f"{title_name} - {user_input['ip_address']}",
+            title=title,
             data=data,
             options=options,
         )

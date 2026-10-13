@@ -166,7 +166,7 @@ async def _async_setup_hub_devices(
             device_registry.async_get_or_create(
                 config_entry_id=entry.entry_id,
                 identifiers={(DOMAIN, device.conf.identifier)},
-                name=f"{device.conf.name} (Address {address})",
+                name=f"{device.conf.name}: address {address}, serial number: {device.conf.identifier}",
                 manufacturer=device.conf.manufacturer,
                 model=device.conf.name,
                 serial_number=serial_number,
