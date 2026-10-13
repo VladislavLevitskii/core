@@ -168,7 +168,7 @@ class PapouchConfigFlow(ConfigFlow, domain=DOMAIN):
         if errors:
             return errors, None
 
-        title = f"{device_name}: IP: {ip_address}, MAC: {mac_address}"
+        title = f"{device_name} - {ip_address} - {mac_address}"
 
         if mode_device is None or device_name is None or mac_address is None:
             # errors shouldn't be empty -> `if errors` should trigger and return
