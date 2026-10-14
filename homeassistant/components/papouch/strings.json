@@ -19,7 +19,7 @@
     "error": {
       "cannot_connect": "Failed to connect to the device.",
       "device_empty_mode": "Device didn't provide its mode.",
-      "invalid_auth": "The password you provided is invalid, try a different one.",
+      "invalid_auth": "The admin password you provided is invalid, try a different one.",
       "invalid_ip_format": "Invalid IPv4 address format.",
       "unsupported_converter": "This converter is unsupported. Please check if this IP belongs to the converter and not some other device."
     },
@@ -30,7 +30,7 @@
     "step": {
       "discovery_confirm": {
         "data": {
-          "password": "Password (optional)",
+          "password": "Admin password (optional)",
           "refresh_rate": "Scan Interval (seconds)",
           "web_port": "HTTP Port"
         },
@@ -48,7 +48,7 @@
       "manual": {
         "data": {
           "ip_address": "IPv4 address",
-          "password": "Password (optional)",
+          "password": "Admin password (optional)",
           "refresh_rate": "Scan interval (seconds)",
           "web_port": "HTTP Port"
         },
@@ -63,7 +63,7 @@
       "network_device": {
         "data": {
           "ip_address": "IPv4 address",
-          "password": "Password (optional)",
+          "password": "Admin password (optional)",
           "refresh_rate": "Scan interval (seconds)",
           "web_port": "HTTP Port"
         },
@@ -79,7 +79,7 @@
         "data": {
           "baudrate": "Baudrate",
           "host": "IPv4 address",
-          "password": "Password (optional)",
+          "password": "Admin password (optional)",
           "refresh_rate": "Scan interval (seconds)",
           "web_port": "HTTP Port"
         },
@@ -96,7 +96,7 @@
         "data": {
           "baudrate": "Baudrate",
           "host": "IPv4 address",
-          "password": "Password (optional)",
+          "password": "Admin password (optional)",
           "refresh_rate": "Scan interval (seconds)",
           "web_port": "HTTP Port"
         },
@@ -111,18 +111,18 @@
       },
       "reauth_confirm": {
         "data": {
-          "password": "New Password"
+          "password": "New admin password"
         },
         "data_description": {
           "password": "Enter a new admin password of the device."
         },
-        "description": "The password for your device **{name}** is no longer valid. Please enter the new password.",
+        "description": "The admin password for your device **{name}** is no longer valid. Please enter the new password.",
         "title": "Reauthenticate {name}"
       },
       "reconfigure": {
         "data": {
           "ip_address": "IPv4 Address",
-          "password": "Password (optional)",
+          "password": "Admin password (optional)",
           "web_port": "HTTP Port"
         },
         "data_description": {
@@ -137,7 +137,7 @@
         "data": {
           "baudrate": "Baudrate",
           "host": "IPv4 address",
-          "password": "Password (optional)",
+          "password": "Admin password (optional)",
           "web_port": "HTTP Port"
         },
         "data_description": {
@@ -370,7 +370,7 @@
       "message": "Failed to execute command {cmd} on {name}."
     },
     "invalid_auth": {
-      "message": "Invalid password of device {name} ({location})"
+      "message": "Invalid admin password of device {name} ({location})"
     },
     "unable_create_device": {
       "message": "Device with {serial_number} couldn't be created."

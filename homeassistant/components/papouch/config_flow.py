@@ -6,7 +6,6 @@ import logging
 import re
 from typing import TYPE_CHECKING, Any, override
 
-import aiohttp
 from aiopapouch import (
     PapouchHTTPClient,
     async_discover_papouch_devices,
@@ -18,6 +17,7 @@ from aiopapouch.exceptions import (
     DeviceAuthError,
     DeviceConnectionError,
     DeviceLogicError,
+    DeviceParseError,
 )
 import serial.tools.list_ports
 import voluptuous as vol
@@ -81,11 +81,7 @@ class PapouchConfigFlow(ConfigFlow, domain=DOMAIN):
             mode_device = await client.get_device_mode()
         except DeviceAuthError:
             return {"base": "invalid_auth"}, None
-        except (
-            aiohttp.ClientError,
-            DeviceConnectionError,
-            TimeoutError,
-        ):
+        except DeviceConnectionError:
             _LOGGER.exception("Failed to connect to the device")
             return {"base": "cannot_connect"}, None
 
@@ -106,7 +102,7 @@ class PapouchConfigFlow(ConfigFlow, domain=DOMAIN):
             device_mode = await converter.get_mode()
             title = f"{converter.conf.context} - {converter.conf.identifier}"
 
-        except aiohttp.ClientError, DeviceConnectionError, TimeoutError:
+        except DeviceConnectionError, DeviceParseError:
             return {"base": "cannot_connect"}, None, None, None, None
 
         return (
@@ -276,7 +272,7 @@ class PapouchConfigFlow(ConfigFlow, domain=DOMAIN):
         try:
             await asyncio.sleep(DHCP_TIMEOUT)
             device_name, device_location = await client.get_device_info()
-        except aiohttp.ClientError:
+        except DeviceConnectionError:
             _LOGGER.exception("Failed to fetch device info after DHCP")
             return self.async_abort(reason="cannot_connect")
 
@@ -751,11 +747,7 @@ class PapouchConfigFlow(ConfigFlow, domain=DOMAIN):
 
         try:
             title_name, data, unique_id = self._switch_task.result()
-        except (
-            aiohttp.ClientError,
-            DeviceConnectionError,
-            TimeoutError,
-        ) as err:
+        except DeviceConnectionError as err:
             _LOGGER.error("Connection error during switch: %s", err)
             return self.async_abort(reason="cannot_connect")
         except DeviceLogicError as err:
@@ -782,7 +774,11 @@ class PapouchConfigFlow(ConfigFlow, domain=DOMAIN):
         )
 
     async def _async_perform_switch(self) -> tuple[str, dict[str, Any], str]:
-        """Async task on background, switch to proper mode and return proper data."""
+        """Async task on background, switch to proper mode and return proper data.
+
+        This method raises DeviceError's children and they should be caught in.
+        """
+
         session = async_get_clientsession(self.hass)
 
         if self._saved_input is None:
@@ -833,11 +829,7 @@ class PapouchConfigFlow(ConfigFlow, domain=DOMAIN):
             await device.switch_to_web_mode()
 
             title_name = await _get_device_name(session, address, password, web_port)
-
-            try:
-                mac_address = await client.get_device_mac()
-            except aiohttp.ClientError as err:
-                raise DeviceConnectionError(err) from err
+            mac_address = await client.get_device_mac()
 
             formatted_mac = format_mac(mac_address)
             unique_id = formatted_mac
