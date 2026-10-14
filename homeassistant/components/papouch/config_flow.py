@@ -100,7 +100,8 @@ class PapouchConfigFlow(ConfigFlow, domain=DOMAIN):
                 return {"base": "unsupported_converter"}, None, None, None, None
 
             device_mode = await converter.get_mode()
-            title = f"{converter.conf.context} - {converter.conf.identifier}"
+            formatted_mac = format_mac(converter.conf.identifier)
+            title = f"{converter.conf.context} - {formatted_mac}"
 
         except DeviceConnectionError, DeviceParseError:
             return {"base": "cannot_connect"}, None, None, None, None
@@ -164,16 +165,17 @@ class PapouchConfigFlow(ConfigFlow, domain=DOMAIN):
         if errors:
             return errors, None
 
-        title = f"{device_name} - {ip_address} - {mac_address}"
-
         if mode_device is None or device_name is None or mac_address is None:
             # errors shouldn't be empty -> `if errors` should trigger and return
             # mypy fix
             return {}, self.async_abort(reason="unreachable")
 
+        formatted_mac = format_mac(mac_address)
+        title = f"{device_name} - {ip_address} - {formatted_mac}"
+
         if mode_device == TCP_SERVER_MODE_INDEX:
             tcp_port = await client.get_device_tcp_port()
-            await self.async_set_unique_id(mac_address)
+            await self.async_set_unique_id(formatted_mac)
             self._abort_if_unique_id_configured()
 
             data = {
@@ -199,7 +201,7 @@ class PapouchConfigFlow(ConfigFlow, domain=DOMAIN):
             errors["base"] = "device_empty_mode"
             return errors, None
 
-        await self.async_set_unique_id(mac_address)
+        await self.async_set_unique_id(formatted_mac)
         self._abort_if_unique_id_configured()
 
         data = {
@@ -487,7 +489,7 @@ class PapouchConfigFlow(ConfigFlow, domain=DOMAIN):
             (
                 errors,
                 title,
-                unique_id,
+                mac_address,
                 device_mode,
                 tcp_port,
             ) = await self._async_validate_network_hub(host, password, web_port)
@@ -498,7 +500,9 @@ class PapouchConfigFlow(ConfigFlow, domain=DOMAIN):
                     self._is_network_hub = True
                     return await self.async_step_web_mode()
 
-                await self.async_set_unique_id(unique_id)
+                formatted_mac = format_mac(mac_address)
+                await self.async_set_unique_id(formatted_mac)
+
                 self._abort_if_unique_id_configured()
 
                 data = {
@@ -576,7 +580,7 @@ class PapouchConfigFlow(ConfigFlow, domain=DOMAIN):
             (
                 errors,
                 title,
-                unique_id,
+                mac_address,
                 device_mode,
                 tcp_port,
             ) = await self._async_validate_network_hub(host, password, web_port)
@@ -587,7 +591,9 @@ class PapouchConfigFlow(ConfigFlow, domain=DOMAIN):
                     self._is_network_hub = True
                     return await self.async_step_web_mode()
 
-                await self.async_set_unique_id(unique_id)
+                formatted_mac = format_mac(mac_address)
+                await self.async_set_unique_id(formatted_mac)
+
                 self._abort_if_unique_id_configured()
 
                 data = {
@@ -832,7 +838,6 @@ class PapouchConfigFlow(ConfigFlow, domain=DOMAIN):
             mac_address = await client.get_device_mac()
 
             formatted_mac = format_mac(mac_address)
-            unique_id = formatted_mac
 
             data = {
                 "ip_address": address,
@@ -841,7 +846,7 @@ class PapouchConfigFlow(ConfigFlow, domain=DOMAIN):
                 "web_port": web_port,
             }
 
-        return f"{title_name} - {address}", data, unique_id
+        return f"{title_name} - {address}", data, formatted_mac
 
     async def async_step_abort_switch(
         self,
