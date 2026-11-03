@@ -312,10 +312,6 @@ class PapouchOptionsFlowHandler(OptionsFlow):
                 "devices": self._devices,
             }
 
-            self.hass.async_create_task(
-                self.hass.config_entries.async_reload(self.config_entry.entry_id)
-            )
-
             return self.async_create_entry(title="", data=new_options)
 
         options = {
@@ -344,9 +340,5 @@ class PapouchOptionsFlowHandler(OptionsFlow):
             **self.config_entry.options,
             "devices": [],
         }
-
-        self.hass.async_create_task(
-            self.hass.config_entries.async_reload(self.config_entry.entry_id)
-        )
 
         return self.async_create_entry(title="", data=new_options)

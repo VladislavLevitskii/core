@@ -83,7 +83,7 @@ def _get_network_schema(
                 int, vol.Range(min=1, max=3600)
             ),
             vol.Optional("web_port", default=default_web_port): vol.All(
-                int, vol.Range(min=1, max=65536)
+                int, vol.Range(min=1, max=65535)
             ),
             vol.Optional("password"): str,
         }

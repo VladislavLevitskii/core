@@ -19,6 +19,7 @@
     "error": {
       "cannot_connect": "Failed to connect to the device.",
       "device_empty_mode": "Device didn't provide its mode.",
+      "device_not_tcp_server": "The device was configured in TCP server mode, now it is not in TCP server.",
       "invalid_auth": "The admin password you provided is invalid, try a different one.",
       "invalid_ip_format": "Invalid IPv4 address format.",
       "unsupported_converter": "This converter is unsupported. Please check if this IP belongs to the converter and not some other device."
@@ -172,6 +173,20 @@
         },
         "description": "Update the manual serial connection details for your device.",
         "title": "Reconfigure {name} manually"
+      },
+      "reconfigure_tcp": {
+        "data": {
+          "host": "IPv4 address",
+          "password": "Admin password (optional)",
+          "web_port": "HTTP Port"
+        },
+        "data_description": {
+          "host": "Enter a new IPv4 address of your network hub.",
+          "password": "Enter a new admin password of the device (Optional).",
+          "web_port": "Enter the HTTP port of the device."
+        },
+        "description": "Update the connection details for your TCP connection.",
+        "title": "Reconfigure {name}"
       },
       "serial_hub": {
         "data": {

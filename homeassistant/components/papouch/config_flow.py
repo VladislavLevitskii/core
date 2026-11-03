@@ -309,7 +309,7 @@ class PapouchConfigFlow(ConfigFlow, domain=DOMAIN):
                     int, vol.Range(min=1, max=3600)
                 ),
                 vol.Optional("web_port", default=DEFAULT_WEB_PORT): vol.All(
-                    int, vol.Range(min=1, max=65536)
+                    int, vol.Range(min=1, max=65535)
                 ),
                 vol.Optional("password"): str,
             }
@@ -807,6 +807,9 @@ class PapouchConfigFlow(ConfigFlow, domain=DOMAIN):
             if converter is None:
                 raise DeviceConnectionError("Unsupported device")
 
+            # identifier is a MAC address
+            formatted_mac = format_mac(converter.conf.identifier)
+
             await converter.switch_to_tcp_server()
 
             (
@@ -931,6 +934,11 @@ class PapouchConfigFlow(ConfigFlow, domain=DOMAIN):
         if connection_type == "network_hub":
             return await self.async_step_reconfigure_network_hub(user_input)
 
+        if connection_type == "tcp":
+            return await self.async_step_reconfigure_tcp(user_input)
+
+        # else is plain network device
+
         if user_input is not None:
             errors, _ = await self._test_connection(
                 user_input["ip_address"],
@@ -971,7 +979,7 @@ class PapouchConfigFlow(ConfigFlow, domain=DOMAIN):
                 vol.Required("ip_address", default=entry.data["ip_address"]): str,
                 vol.Optional("password", default=entry.data.get("password", "")): str,
                 vol.Optional("web_port", default=default_web_port): vol.All(
-                    int, vol.Range(min=1, max=65536)
+                    int, vol.Range(min=1, max=65535)
                 ),
             }
         )
@@ -1160,6 +1168,68 @@ class PapouchConfigFlow(ConfigFlow, domain=DOMAIN):
 
         return self.async_show_form(
             step_id="reconfigure_serial_manual",
+            data_schema=schema,
+            errors=errors,
+            description_placeholders={"name": entry.title},
+        )
+
+    async def async_step_reconfigure_tcp(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Handle reconfiguration for tcp device."""
+        errors: dict[str, str] = {}
+
+        entry_id = self.context.get("entry_id")
+        if not entry_id:
+            return self.async_abort(reason="unreachable")
+
+        entry = self.hass.config_entries.async_get_entry(entry_id)
+        if entry is None:
+            return self.async_abort(reason="unreachable")
+
+        if user_input is not None:
+            host = user_input["host"]
+            password = user_input.get("password", "")
+            web_port = user_input.get("web_port", DEFAULT_WEB_PORT)
+
+            errors, mode_device = await self._test_connection(host, password, web_port)
+
+            if not errors:
+                if mode_device != TCP_SERVER_MODE_INDEX:
+                    errors["base"] = "device_not_tcp_server"
+
+                session = async_get_clientsession(self.hass)
+                client = PapouchHTTPClient(
+                    host, session, password=password, web_port=web_port
+                )
+                try:
+                    tcp_port = await client.get_device_tcp_port()
+                except DeviceConnectionError, DeviceParseError:
+                    errors["base"] = "cannot_connect"
+                else:
+                    self.hass.config_entries.async_update_entry(
+                        entry,
+                        data={
+                            **entry.data,
+                            "host": host,
+                            "port": tcp_port,
+                        },
+                    )
+                    await self.hass.config_entries.async_reload(entry.entry_id)
+                    return self.async_abort(reason="reconfigure_successful")
+
+        schema = vol.Schema(
+            {
+                vol.Required("host", default=entry.data.get("host")): str,
+                vol.Optional("password"): str,
+                vol.Optional("web_port", default=DEFAULT_WEB_PORT): vol.All(
+                    int, vol.Range(min=1, max=65535)
+                ),
+            }
+        )
+
+        return self.async_show_form(
+            step_id="reconfigure_tcp",
             data_schema=schema,
             errors=errors,
             description_placeholders={"name": entry.title},
