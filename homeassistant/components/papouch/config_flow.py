@@ -856,7 +856,7 @@ class PapouchConfigFlow(ConfigFlow, domain=DOMAIN):
         user_input: dict[str, Any] | None = None,
     ) -> ConfigFlowResult:
         """Make action when user clicks cancel."""
-        return self.async_abort(reason="web_mode_required")
+        return self.async_abort(reason="web_tcp_modes_required")
 
     async def async_step_reauth(
         self,
@@ -917,19 +917,31 @@ class PapouchConfigFlow(ConfigFlow, domain=DOMAIN):
         """Handle integration reconfiguration (e.g. IP address and password change)."""
         errors: dict[str, str] = {}
 
-        entry_id = self.context.get("entry_id")
-        if not entry_id:
-            return self.async_abort(reason="unreachable")
-
-        entry = self.hass.config_entries.async_get_entry(entry_id)
-
-        if entry is None:
-            return self.async_abort(reason="unreachable")
+        entry = self._get_reconfigure_entry()
 
         connection_type = entry.data.get("connection_type", "network")
 
         if connection_type == "serial":
             return await self.async_step_reconfigure_serial(user_input)
+
+        # here we check the mode of the device if it responds
+        # and if the mode is different we abort
+        # if not we continue to the form
+        if user_input is None:
+            ip_address = entry.data.get("ip_address") or entry.data["host"]
+            password = entry.data.get("password", "")
+            web_port = entry.data.get("web_port", DEFAULT_WEB_PORT)
+
+            errors, mode_device = await self._test_connection(
+                ip_address, password, web_port
+            )
+
+            if not errors:
+                if connection_type == "tcp" and mode_device != TCP_SERVER_MODE_INDEX:
+                    return self.async_abort(reason="device_not_tcp_mode")
+
+                if connection_type == "network" and mode_device != WEB_MODE_INDEX:
+                    return self.async_abort(reason="device_not_web_mode")
 
         if connection_type == "network_hub":
             return await self.async_step_reconfigure_network_hub(user_input)
@@ -938,47 +950,41 @@ class PapouchConfigFlow(ConfigFlow, domain=DOMAIN):
             return await self.async_step_reconfigure_tcp(user_input)
 
         # else is plain network device
-
         if user_input is not None:
-            errors, _ = await self._test_connection(
-                user_input["ip_address"],
-                user_input.get("password", ""),
-                user_input.get("web_port", DEFAULT_WEB_PORT),
-            )
+            ip_address = user_input["ip_address"]
+            password = user_input.get("password", "")
+            web_port = user_input.get("web_port", DEFAULT_WEB_PORT)
+            errors, _ = await self._test_connection(ip_address, password, web_port)
 
             if not errors:
                 session = async_get_clientsession(self.hass)
 
                 new_name = await _get_device_name(
                     session,
-                    user_input["ip_address"],
-                    user_input.get("password", ""),
-                    user_input.get("web_port", DEFAULT_WEB_PORT),
+                    ip_address,
+                    password,
+                    web_port,
                 )
                 new_title = f"{new_name} - {user_input['ip_address']}"
 
-                self.hass.config_entries.async_update_entry(
+                return self.async_update_reload_and_abort(
                     entry,
-                    data={
-                        **entry.data,
-                        "ip_address": user_input["ip_address"],
-                        "password": user_input.get("password", ""),
-                        "web_port": user_input.get("web_port", DEFAULT_WEB_PORT),
+                    data_updates={
+                        "ip_address": ip_address,
+                        "password": password,
+                        "web_port": web_port,
                     },
                     title=new_title,
                 )
-                await self.hass.config_entries.async_reload(entry.entry_id)
-                return self.async_abort(reason="reconfigure_successful")
 
-        default_web_port = entry.data.get("web_port", DEFAULT_WEB_PORT)
         if user_input and "web_port" in user_input:
-            default_web_port = user_input["web_port"]
+            web_port = user_input["web_port"]
 
         schema = vol.Schema(
             {
                 vol.Required("ip_address", default=entry.data["ip_address"]): str,
                 vol.Optional("password", default=entry.data.get("password", "")): str,
-                vol.Optional("web_port", default=default_web_port): vol.All(
+                vol.Optional("web_port", default=web_port): vol.All(
                     int, vol.Range(min=1, max=65535)
                 ),
             }
@@ -999,13 +1005,7 @@ class PapouchConfigFlow(ConfigFlow, domain=DOMAIN):
         """Handle reconfiguration for network hub."""
         errors: dict[str, str] = {}
 
-        entry_id = self.context.get("entry_id")
-        if not entry_id:
-            return self.async_abort(reason="unreachable")
-
-        entry = self.hass.config_entries.async_get_entry(entry_id)
-        if entry is None:
-            return self.async_abort(reason="unreachable")
+        entry = self._get_reconfigure_entry()
 
         if user_input is not None:
             host = user_input["host"]
@@ -1021,26 +1021,25 @@ class PapouchConfigFlow(ConfigFlow, domain=DOMAIN):
                 tcp_port,
             ) = await self._async_validate_network_hub(host, password, web_port)
 
-            if not errors:
+            # title will never be None if errors are not empty
+            # because of the mypy
+            if not errors and title is not None:
                 if device_mode != TCP_SERVER_MODE_INDEX:
                     self._saved_input = user_input
                     self._is_network_hub = True
                     return await self.async_step_web_mode()
 
-                self.hass.config_entries.async_update_entry(
+                return self.async_update_reload_and_abort(
                     entry,
-                    data={
-                        **entry.data,
+                    data_updates={
                         "host": host,
                         "baudrate": baudrate,
                         "web_port": web_port,
                         "password": password,
                         "tcp_port": tcp_port,
                     },
-                    title=f"{title} - {host}",
+                    title=title,
                 )
-                await self.hass.config_entries.async_reload(entry.entry_id)
-                return self.async_abort(reason="reconfigure_successful")
 
         schema = vol.Schema(
             {
@@ -1068,15 +1067,7 @@ class PapouchConfigFlow(ConfigFlow, domain=DOMAIN):
         """Handle reconfiguration for serial hub."""
         errors: dict[str, str] = {}
 
-        entry_id = self.context.get("entry_id")
-
-        if not entry_id:
-            return self.async_abort(reason="unreachable")
-
-        entry = self.hass.config_entries.async_get_entry(entry_id)
-
-        if entry is None:
-            return self.async_abort(reason="unreachable")
+        entry = self._get_reconfigure_entry()
 
         if user_input is not None:
             port = user_input["port"]
@@ -1089,17 +1080,14 @@ class PapouchConfigFlow(ConfigFlow, domain=DOMAIN):
 
             baudrate = user_input["baudrate"]
 
-            self.hass.config_entries.async_update_entry(
+            return self.async_update_reload_and_abort(
                 entry,
-                data={
-                    **entry.data,
+                data_updates={
                     "port": port,
                     "baudrate": baudrate,
                 },
                 title=f"Papouch - {port}",
             )
-            await self.hass.config_entries.async_reload(entry.entry_id)
-            return self.async_abort(reason="reconfigure_successful")
 
         list_of_ports = await self._async_get_available_serial_ports()
 
@@ -1129,29 +1117,20 @@ class PapouchConfigFlow(ConfigFlow, domain=DOMAIN):
         """Handle manual serial port for reconfiguration."""
         errors: dict[str, str] = {}
 
-        entry_id = self.context.get("entry_id")
-        if not entry_id:
-            return self.async_abort(reason="unreachable")
-
-        entry = self.hass.config_entries.async_get_entry(entry_id)
-        if entry is None:
-            return self.async_abort(reason="unreachable")
+        entry = self._get_reconfigure_entry()
 
         if user_input is not None:
             port = user_input["port"]
             baudrate = user_input["baudrate"]
 
-            self.hass.config_entries.async_update_entry(
+            return self.async_update_reload_and_abort(
                 entry,
-                data={
-                    **entry.data,
+                data_updates={
                     "port": port,
                     "baudrate": baudrate,
                 },
                 title=f"Papouch - {port}",
             )
-            await self.hass.config_entries.async_reload(entry.entry_id)
-            return self.async_abort(reason="reconfigure_successful")
 
         default_baudrate = entry.data.get("baudrate", DEFAULT_BAUDRATE)
         if self._saved_input:
@@ -1179,13 +1158,7 @@ class PapouchConfigFlow(ConfigFlow, domain=DOMAIN):
         """Handle reconfiguration for tcp device."""
         errors: dict[str, str] = {}
 
-        entry_id = self.context.get("entry_id")
-        if not entry_id:
-            return self.async_abort(reason="unreachable")
-
-        entry = self.hass.config_entries.async_get_entry(entry_id)
-        if entry is None:
-            return self.async_abort(reason="unreachable")
+        entry = self._get_reconfigure_entry()
 
         if user_input is not None:
             host = user_input["host"]
@@ -1196,7 +1169,7 @@ class PapouchConfigFlow(ConfigFlow, domain=DOMAIN):
 
             if not errors:
                 if mode_device != TCP_SERVER_MODE_INDEX:
-                    errors["base"] = "device_not_tcp_server"
+                    return self.async_abort(reason="device_not_tcp_mode")
 
                 session = async_get_clientsession(self.hass)
                 client = PapouchHTTPClient(
@@ -1207,16 +1180,13 @@ class PapouchConfigFlow(ConfigFlow, domain=DOMAIN):
                 except DeviceConnectionError, DeviceParseError:
                     errors["base"] = "cannot_connect"
                 else:
-                    self.hass.config_entries.async_update_entry(
+                    return self.async_update_reload_and_abort(
                         entry,
-                        data={
-                            **entry.data,
+                        data_updates={
                             "host": host,
                             "port": tcp_port,
                         },
                     )
-                    await self.hass.config_entries.async_reload(entry.entry_id)
-                    return self.async_abort(reason="reconfigure_successful")
 
         schema = vol.Schema(
             {
