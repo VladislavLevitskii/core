@@ -1,7 +1,7 @@
 {
   "domain": "papouch",
   "name": "Papouch",
-  "categories": ["sensors"],
+  "categories": ["sensors", "plugs_switches"],
   "codeowners": ["@VladislavLevitskii"],
   "config_flow": true,
   "dhcp": [

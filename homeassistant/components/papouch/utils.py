@@ -10,7 +10,7 @@ from aiopapouch.exceptions import (
     DeviceConnectionError,
     DeviceParseError,
 )
-import probation as prob
+import probatio as prob
 
 from homeassistant.helpers.device_registry import format_mac
 

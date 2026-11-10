@@ -19,7 +19,7 @@ from aiopapouch.exceptions import (
     DeviceLogicError,
     DeviceParseError,
 )
-import probation as prob
+import probatio as prob
 import serial.tools.list_ports
 
 from homeassistant.config_entries import ConfigFlow, ConfigFlowResult, OptionsFlow

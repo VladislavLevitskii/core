@@ -11,7 +11,7 @@ from aiopapouch.exceptions import (
     DeviceParseError,
 )
 from aiopapouch.utils import assign_next_available_address, get_device_details
-import probation as prob
+import probatio as prob
 
 from homeassistant.config_entries import ConfigFlowResult, OptionsFlow
 from homeassistant.helpers.selector import (
