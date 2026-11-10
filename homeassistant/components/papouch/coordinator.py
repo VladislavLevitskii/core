@@ -6,7 +6,12 @@ from datetime import timedelta
 import logging
 from typing import TYPE_CHECKING, Any, override
 
-from aiopapouch.exceptions import DeviceAuthError, DeviceConnectionError
+from aiopapouch.exceptions import (
+    DeviceAuthError,
+    DeviceConnectionError,
+    DeviceLogicError,
+    DeviceParseError,
+)
 from pap_spinel import SpinelTransportError
 
 from homeassistant.exceptions import ConfigEntryAuthFailed, ConfigEntryNotReady
@@ -65,6 +70,10 @@ class PapouchNetworkDataUpdateCoordinator(PapouchBaseCoordinator):
         )
         self.api_client = api_client
         self.device = device
+        self.translations = {
+            "name": device.conf.name,
+            "location": device.conf.location,
+        }
 
     @override
     def get_devices(self) -> Sequence[PapouchNetworkDevice]:
@@ -77,22 +86,32 @@ class PapouchNetworkDataUpdateCoordinator(PapouchBaseCoordinator):
         try:
             parsed_data = await self.device.get_fresh_data()
         except DeviceAuthError as err:
+            _LOGGER.debug(
+                "Retrieving network fresh data is failed on auth error, err: %s", err
+            )
             raise ConfigEntryAuthFailed(
                 translation_domain=DOMAIN,
-                translation_key="invalid_auth",
-                translation_placeholders={
-                    "name": self.device.conf.name,
-                    "location": self.device.conf.location,
-                },
+                translation_key="invalid_auth_with_info",
+                translation_placeholders=self.translations,
             ) from err
         except DeviceConnectionError as err:
+            _LOGGER.debug(
+                "Retrieving network fresh data is failed on connection error, err: %s",
+                err,
+            )
             raise ConfigEntryNotReady(
                 translation_domain=DOMAIN,
                 translation_key="cannot_connect_http",
-                translation_placeholders={
-                    "name": self.device.conf.name,
-                    "location": self.device.conf.location,
-                },
+                translation_placeholders=self.translations,
+            ) from err
+        except DeviceParseError as err:
+            _LOGGER.debug(
+                "Retrieving network fresh data is failed on parsing error, err: %s", err
+            )
+            raise ConfigEntryNotReady(
+                translation_domain=DOMAIN,
+                translation_key="parsing_error_with_info",
+                translation_placeholders=self.translations,
             ) from err
 
         return {self.device.conf.identifier: parsed_data}
@@ -129,21 +148,47 @@ class PapouchSerialDataUpdateCoordinator(PapouchBaseCoordinator):
     async def _async_update_data(self) -> dict[str, Any]:
         """Fetch data from all devices in the group."""
         device_data = {}
-        if self.config_entry is None or self.config_entry.data is None:
-            port = "Unknown"
-        else:
-            port = self.config_entry.data.get("port", "Unknown")
 
         for device in self.devices:
             try:
                 device_data[device.conf.identifier] = await device.get_fresh_data()
             except DeviceConnectionError as err:
+                _LOGGER.debug(
+                    "Retrieving serial fresh data is failed on connection error, err: %s",
+                    err,
+                )
                 raise ConfigEntryNotReady(
                     translation_domain=DOMAIN,
-                    translation_key="cannot_connect",
+                    translation_key="cannot_connect_with_info",
                     translation_placeholders={
                         "name": device.conf.name,
-                        "location": port,
+                        "location": device.conf.identifier,
+                    },
+                ) from err
+            except DeviceParseError as err:
+                _LOGGER.debug(
+                    "Retrieving serial fresh data is failed on parsing error, err: %s",
+                    err,
+                )
+                raise ConfigEntryNotReady(
+                    translation_domain=DOMAIN,
+                    translation_key="parsing_error_with_info",
+                    translation_placeholders={
+                        "name": device.conf.name,
+                        "location": device.conf.identifier,
+                    },
+                ) from err
+            except DeviceLogicError as err:
+                _LOGGER.debug(
+                    "Retrieving serial fresh data is failed on logic error, err: %s",
+                    err,
+                )
+                raise ConfigEntryNotReady(
+                    translation_domain=DOMAIN,
+                    translation_key="logic_error_with_info",
+                    translation_placeholders={
+                        "name": device.conf.name,
+                        "location": device.conf.identifier,
                     },
                 ) from err
 

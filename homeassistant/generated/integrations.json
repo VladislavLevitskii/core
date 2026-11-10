@@ -11195,6 +11195,9 @@
     "papouch": {
       "name": "Papouch",
       "integration_type": "hub",
+      "categories": [
+        "sensors"
+      ],
       "config_flow": true,
       "iot_class": "local_polling"
     },

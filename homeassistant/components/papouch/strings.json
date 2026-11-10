@@ -2,12 +2,14 @@
   "config": {
     "abort": {
       "already_configured": "This device is already configured, you can delete it from the integration and configure it again.",
+      "auth_error": "Error during authentication.",
       "cannot_connect": "Home Assistant can't connect to the device.",
       "converter_different_mode": "The converter is in different mode, please change its mode to TCP server.",
       "device_not_tcp_mode": "The device was configured in TCP server mode, now it is not in TCP server.",
       "device_not_web_mode": "The device was configured in WEB mode, now it is not in WEB.",
       "invalid_response": "Invalid response from the device, check the logs for more information",
       "mode_is_missing": "The device didn't provide its current mode",
+      "parse_error": "The device responded with invalid data",
       "reauth_successful": "Re-authentication was successful",
       "reconfigure_successful": "Device reconfiguration was successful.",
       "unreachable": "This error shouldn't be triggered. Unreachable code in config flow.",
@@ -23,6 +25,7 @@
       "device_empty_mode": "Device didn't provide its mode.",
       "invalid_auth": "The admin password you provided is invalid, try a different one.",
       "invalid_ip_format": "Invalid IPv4 address format.",
+      "parse_error": "Error during parsing of the XML.",
       "unsupported_converter": "This converter is unsupported. Please check if this IP belongs to the converter and not some other device."
     },
     "flow_title": "{name}",
@@ -374,7 +377,7 @@
   },
   "exceptions": {
     "cannot_connect": {
-      "message": "Failed to connect to device {name} ({location})."
+      "message": "Failed to connect to the device."
     },
     "cannot_connect_http": {
       "message": "Failed to connect to device {name} ({location}) via HTTP."
@@ -382,14 +385,26 @@
     "cannot_connect_tcp": {
       "message": "Failed to connect to device {name} ({location}) via TCP."
     },
+    "cannot_connect_with_info": {
+      "message": "Failed to connect to device {name} ({location})."
+    },
     "command_failed": {
       "message": "Failed to execute command {cmd} on {name}."
     },
     "invalid_auth": {
+      "message": "Invalid admin password of device."
+    },
+    "invalid_auth_with_info": {
       "message": "Invalid admin password of device {name} ({location})"
     },
-    "unable_create_device": {
-      "message": "Device with {serial_number} couldn't be created."
+    "logic_error_with_info": {
+      "message": "Error during data parsing from the device {name} ({location})."
+    },
+    "parsing_error": {
+      "message": "Error during XML parsing."
+    },
+    "parsing_error_with_info": {
+      "message": "Error during XML parsing from the device {name} ({location})."
     },
     "unable_open_port": {
       "message": "Unable to open {port}."
@@ -406,12 +421,13 @@
     "error": {
       "address_already_used": "This address is already in use by another device.",
       "assign_failed": "The device did not respond after multiple attempts. Please verify that the Serial Number is correct, the device is powered on, and connected to the bus.",
+      "assign_parsing_failed": "During assigning a new address the device returned unparsable response.",
       "cannot_connect": "Cannot connect to the device at the given address.",
       "cannot_connect_broadcast": "Cannot connect to the device via broadcast.",
       "invalid_serial_format": "Invalid format. The serial number must contain a slash (e.g. 0123/4567).",
       "no_free_addresses": "No free addresses left in the pool (0-253).",
+      "parse_error": "Error during parsing of the incoming packet.",
       "serial_already_used": "This serial number is already in use.",
-      "unable_create_device": "Device couldn't be created or serial number couldn't be fetched.",
       "unsupported_device": "This device {device_name} is unsupported."
     },
     "step": {

@@ -5,9 +5,13 @@ import logging
 from typing import Any
 
 from aiopapouch import is_device_supported
-from aiopapouch.exceptions import DeviceConnectionError
+from aiopapouch.exceptions import (
+    DeviceConnectionError,
+    DeviceLogicError,
+    DeviceParseError,
+)
 from aiopapouch.utils import assign_next_available_address, get_device_details
-import voluptuous as vol
+import probation as prob
 
 from homeassistant.config_entries import ConfigFlowResult, OptionsFlow
 from homeassistant.helpers.selector import (
@@ -47,10 +51,10 @@ class PapouchOptionsFlowHandler(OptionsFlow):
             "refresh_rate", DEFAULT_SCAN_INTERVAL
         )
 
-        schema = vol.Schema(
+        schema = prob.Schema(
             {
-                vol.Required("refresh_rate", default=current_refresh): vol.All(
-                    int, vol.Range(min=1, max=3600)
+                prob.Required("refresh_rate", default=current_refresh): prob.All(
+                    int, prob.Range(min=1, max=3600)
                 ),
             }
         )
@@ -84,10 +88,10 @@ class PapouchOptionsFlowHandler(OptionsFlow):
             "refresh_rate", DEFAULT_SCAN_INTERVAL
         )
 
-        schema = vol.Schema(
+        schema = prob.Schema(
             {
-                vol.Required("refresh_rate", default=current_refresh): vol.All(
-                    int, vol.Range(min=1, max=3600)
+                prob.Required("refresh_rate", default=current_refresh): prob.All(
+                    int, prob.Range(min=1, max=3600)
                 ),
             }
         )
@@ -134,10 +138,26 @@ class PapouchOptionsFlowHandler(OptionsFlow):
                     device_name, serial_number, _ = await get_device_details(
                         coordinator.api_client, address
                     )
-                except DeviceConnectionError:
+                except DeviceConnectionError as err:
+                    _LOGGER.debug(
+                        "Adding device by address failed on connection error, err: %s",
+                        err,
+                    )
                     errors["base"] = "cannot_connect"
+                # here we unify the exceptions because
+                # they are indistinguishable in that context
+                except (DeviceParseError, DeviceLogicError) as err:
+                    _LOGGER.debug(
+                        "Adding device by address failed on logic error, err: %s",
+                        err,
+                    )
+                    errors["base"] = "parse_error"
 
                 if not errors and not is_device_supported(device_name, "serial"):
+                    _LOGGER.debug(
+                        "Adding device %s by address failed because it is unsupported",
+                        device_name,
+                    )
                     errors["base"] = "unsupported_device"
 
             if not errors:
@@ -164,9 +184,9 @@ class PapouchOptionsFlowHandler(OptionsFlow):
                         description_placeholders={"device_name": device_name or ""},
                     )
 
-        schema = vol.Schema(
+        schema = prob.Schema(
             {
-                vol.Required("address", default=1): NumberSelector(
+                prob.Required("address", default=1): NumberSelector(
                     NumberSelectorConfig(
                         min=0,
                         max=253,
@@ -209,16 +229,22 @@ class PapouchOptionsFlowHandler(OptionsFlow):
 
             used_addresses: list[int] = [d["address"] for d in self._devices]
 
-            new_address, device_name = await assign_next_available_address(
-                coordinator.api_client, used_addresses, serial_number
-            )
-
-            if new_address is None:
-                errors["base"] = "no_free_addresses"
-            elif device_name is None:
-                errors["base"] = "assign_failed"
-            elif not is_device_supported(device_name, "serial"):
-                errors["base"] = "unsupported_device"
+            try:
+                new_address, device_name = await assign_next_available_address(
+                    coordinator.api_client, used_addresses, serial_number
+                )
+                if new_address is None:
+                    errors["base"] = "no_free_addresses"
+                elif device_name is None:
+                    errors["base"] = "assign_failed"
+                elif not is_device_supported(device_name, "serial"):
+                    _LOGGER.debug(
+                        "Adding device %s by address failed because it is unsupported",
+                        device_name,
+                    )
+                    errors["base"] = "unsupported_device"
+            except DeviceParseError:
+                errors["base"] = "assign_parsing_failed"
 
             if not errors:
                 self._devices.append(
@@ -239,9 +265,9 @@ class PapouchOptionsFlowHandler(OptionsFlow):
                     description_placeholders={"device_name": device_name or ""},
                 )
 
-        schema = vol.Schema(
+        schema = prob.Schema(
             {
-                vol.Required("serial_number"): str,
+                prob.Required("serial_number"): str,
             }
         )
 
@@ -265,8 +291,20 @@ class PapouchOptionsFlowHandler(OptionsFlow):
             device_name, serial_number, new_address = await get_device_details(
                 coordinator.api_client, SERIAL_BROADCAST_ADDRESS
             )
-        except DeviceConnectionError:
+        except DeviceConnectionError as err:
+            _LOGGER.debug(
+                "Adding device by address failed on connection error, err: %s",
+                err,
+            )
             errors["base"] = "cannot_connect"
+        # here we unify the exceptions because
+        # they are indistinguishable in that context
+        except (DeviceParseError, DeviceLogicError) as err:
+            _LOGGER.debug(
+                "Adding device by address failed on logic error, err: %s",
+                err,
+            )
+            errors["base"] = "parse_error"
 
         for device in self._devices:
             if new_address == device["address"]:
@@ -321,9 +359,9 @@ class PapouchOptionsFlowHandler(OptionsFlow):
             for dev in self._devices
         }
 
-        schema = vol.Schema(
+        schema = prob.Schema(
             {
-                vol.Required("device"): vol.In(options),
+                prob.Required("device"): prob.In(options),
             }
         )
 

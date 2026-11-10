@@ -3,14 +3,18 @@
 import logging
 from typing import TYPE_CHECKING
 
-import aiohttp
 from aiopapouch import (
     PapouchHTTPClient,
     PapouchSerialClient,
     create_network_device,
     create_serial_device,
 )
-from aiopapouch.exceptions import DeviceConnectionError
+from aiopapouch.exceptions import (
+    DeviceAuthError,
+    DeviceConnectionError,
+    DeviceLogicError,
+    DeviceParseError,
+)
 from pap_spinel import SerialTransport, SpinelTransportError, TcpTransport
 
 from homeassistant.config_entries import ConfigEntry
@@ -54,49 +58,103 @@ type PapouchConfigEntry = ConfigEntry[PapouchBaseCoordinator]
 async def _async_setup_network_entry(
     hass: HomeAssistant, entry: PapouchConfigEntry
 ) -> PapouchNetworkDataUpdateCoordinator:
+
     session = async_get_clientsession(hass)
-    password = entry.data.get("password", "")
+    password = entry.data.get("password")
     web_port = entry.data.get("web_port", DEFAULT_WEB_PORT)
+
+    # aiopapouch library expects an empty string instead of None for unauthenticated devices
     api_client = PapouchHTTPClient(
-        entry.data["ip_address"], session, password=password, web_port=web_port
+        entry.data["ip_address"], session, password=password or "", web_port=web_port
     )
 
-    name, location = await api_client.get_device_info()
-    safe_name = name or UNKNOWN_NAME
-    safe_location = location or UNKNOWN_LOCATION
+    # note that now we will access name and location
+    # of the device, first right below
+    # and second in the create_network_device
+
+    # this is done so a user will know that the device
+    # he tried to create is unsupported and he will
+    # see its name and location
 
     try:
-        device = await create_network_device(api_client)
-    except aiohttp.ClientResponseError as err:
+        name, location = await api_client.get_device_info()
+    except DeviceAuthError as err:
+        _LOGGER.debug(
+            "Authentication failed in `get_device_info`, original err: %s",
+            err,
+        )
         raise ConfigEntryAuthFailed(
             translation_domain=DOMAIN,
             translation_key="invalid_auth",
-            translation_placeholders={
-                "name": safe_name,
-                "location": safe_location,
-            },
         ) from err
-
-    except aiohttp.ClientError as err:
+    except DeviceConnectionError as err:
+        _LOGGER.debug(
+            "Connection failed in `get_device_info`, original err: %s",
+            err,
+        )
         raise ConfigEntryNotReady(
             translation_domain=DOMAIN,
-            translation_key="cannot_connect_http",
-            translation_placeholders={"name": safe_name, "location": safe_location},
+            translation_key="cannot_connect",
+        ) from err
+    except DeviceParseError as err:
+        _LOGGER.debug(
+            "Parsing failed in `get_device_info`, original err: %s",
+            err,
+        )
+        raise ConfigEntryNotReady(
+            translation_domain=DOMAIN,
+            translation_key="parsing_error",
+        ) from err
+
+    placeholders = {
+        "name": name or UNKNOWN_NAME,
+        "location": location or UNKNOWN_LOCATION,
+    }
+
+    try:
+        device = await create_network_device(api_client)
+    except DeviceAuthError as err:
+        _LOGGER.debug(
+            "Authentication failed in `create_network_device`, original err: %s",
+            err,
+        )
+        raise ConfigEntryAuthFailed(
+            translation_domain=DOMAIN,
+            translation_key="invalid_auth_with_info",
+            translation_placeholders=placeholders,
+        ) from err
+    except DeviceConnectionError as err:
+        _LOGGER.debug(
+            "Connection failed in `create_network_device`, original err: %s",
+            err,
+        )
+        raise ConfigEntryNotReady(
+            translation_domain=DOMAIN,
+            translation_key="cannot_connect_with_info",
+            translation_placeholders=placeholders,
+        ) from err
+    except DeviceParseError as err:
+        _LOGGER.debug(
+            "Parsing failed in `create_network_device`, original err: %s",
+            err,
+        )
+        raise ConfigEntryNotReady(
+            translation_domain=DOMAIN,
+            translation_key="parsing_error_with_info",
+            translation_placeholders=placeholders,
         ) from err
 
     if device is None:
         raise ConfigEntryNotReady(
             translation_domain=DOMAIN,
             translation_key="unsupported_device",
-            translation_placeholders={"name": safe_name, "location": safe_location},
+            translation_placeholders=placeholders,
         )
-
-    if entry.unique_id is None and device.conf.identifier:
-        hass.config_entries.async_update_entry(entry, unique_id=device.conf.identifier)
 
     device_registry = dr.async_get(hass)
     device_registry.async_get_or_create(
         config_entry_id=entry.entry_id,
+        # MAC address is stored in the identifier field
         connections={(dr.CONNECTION_NETWORK_MAC, device.conf.identifier)},
         identifiers={(DOMAIN, device.conf.identifier)},
         name=device.conf.name,
@@ -125,6 +183,7 @@ def _async_cleanup_stale_devices(
         for domain, device_id in device_entry.identifiers:
             if domain == DOMAIN:
                 if device_id != port and device_id not in expected_serial_numbers:
+                    _LOGGER.debug("Removing stale device %s from registry", device_id)
                     device_registry.async_remove_device(device_entry.id)
                 break
 
@@ -147,13 +206,42 @@ async def _async_setup_hub_devices(
         serial_number = dev_conf["serial_number"]
         name = dev_conf["name"]
 
+        translations = {
+            "name": name,
+            "location": f"SN: {serial_number} - Address: {address}",
+        }
+
         try:
             device = await create_serial_device(serial_client, address)
         except DeviceConnectionError as err:
+            _LOGGER.debug(
+                "Connection failed in `create_serial_device`, original err: %s",
+                err,
+            )
             raise ConfigEntryNotReady(
                 translation_domain=DOMAIN,
-                translation_key="unable_create_device",
-                translation_placeholders={"serial_number": serial_number},
+                translation_key="cannot_connect_with_info",
+                translation_placeholders=translations,
+            ) from err
+        except DeviceParseError as err:
+            _LOGGER.debug(
+                "Parsing failed in `create_serial_device`, original err: %s",
+                err,
+            )
+            raise ConfigEntryNotReady(
+                translation_domain=DOMAIN,
+                translation_key="parsing_error_with_info",
+                translation_placeholders=translations,
+            ) from err
+        except DeviceLogicError as err:
+            _LOGGER.debug(
+                "Logic error occurred in `create_serial_device`, original err: %s",
+                err,
+            )
+            raise ConfigEntryNotReady(
+                translation_domain=DOMAIN,
+                translation_key="logic_error_with_info",
+                translation_placeholders=translations,
             ) from err
 
         if device:
@@ -193,7 +281,7 @@ async def _async_setup_serial_entry(
 
     try:
         await serial_client.open()
-    except SpinelTransportError as err:
+    except DeviceConnectionError as err:
         raise ConfigEntryNotReady(
             translation_domain=DOMAIN,
             translation_key="unable_open_port",
@@ -215,29 +303,57 @@ async def _async_setup_tcp_entry(
 
     try:
         await serial_client.open()
-    except SpinelTransportError as err:
+    except DeviceConnectionError as err:
         raise ConfigEntryNotReady(
             translation_domain=DOMAIN,
             translation_key="cannot_connect_tcp",
             translation_placeholders={"name": host, "location": port},
         ) from err
 
+    # we insert different semantic values so
+    # we don't have to create similar translation keys
+    translations = {"name": host, "location": port}
+
     try:
         device = await create_serial_device(
             serial_client, address=SERIAL_BROADCAST_ADDRESS
         )
     except DeviceConnectionError as err:
+        _LOGGER.debug(
+            "Connection failed in `create_serial_device`, original err: %s",
+            err,
+        )
         raise ConfigEntryNotReady(
             translation_domain=DOMAIN,
-            translation_key="unable_create_device",
-            translation_placeholders={"serial_number": host},
+            translation_key="cannot_connect_with_info",
+            translation_placeholders=translations,
+        ) from err
+    except DeviceParseError as err:
+        _LOGGER.debug(
+            "Parsing failed in `create_serial_device`, original err: %s",
+            err,
+        )
+        raise ConfigEntryNotReady(
+            translation_domain=DOMAIN,
+            translation_key="parsing_error_with_info",
+            translation_placeholders=translations,
+        ) from err
+    except DeviceLogicError as err:
+        _LOGGER.debug(
+            "Logic error occurred in `create_serial_device`, original err: %s",
+            err,
+        )
+        raise ConfigEntryNotReady(
+            translation_domain=DOMAIN,
+            translation_key="logic_error_with_info",
+            translation_placeholders=translations,
         ) from err
 
     if not device:
         raise ConfigEntryNotReady(
             translation_domain=DOMAIN,
             translation_key="unsupported_device",
-            translation_placeholders={"name": host, "location": ""},
+            translation_placeholders=translations,
         )
 
     session = async_get_clientsession(hass)
@@ -249,6 +365,24 @@ async def _async_setup_tcp_entry(
         raise ConfigEntryNotReady(
             translation_domain=DOMAIN,
             translation_key="cannot_connect_http",
+            translation_placeholders={
+                "name": device.conf.name,
+                "location": device.conf.location,
+            },
+        ) from err
+    except DeviceAuthError as err:
+        raise ConfigEntryNotReady(
+            translation_domain=DOMAIN,
+            translation_key="invalid_auth_with_info",
+            translation_placeholders={
+                "name": device.conf.name,
+                "location": device.conf.location,
+            },
+        ) from err
+    except DeviceParseError as err:
+        raise ConfigEntryNotReady(
+            translation_domain=DOMAIN,
+            translation_key="parsing_error_with_info",
             translation_placeholders={
                 "name": device.conf.name,
                 "location": device.conf.location,
@@ -297,7 +431,7 @@ async def _async_setup_network_hub_entry(
     return PapouchSerialDataUpdateCoordinator(hass, serial_client, entry, devices)
 
 
-async def async_setup_entry(hass: HomeAssistant, entry: PapouchConfigEntry) -> bool:
+async def async_setup_entry(hass: HomeAssistant, entry: PapouchConfigEntry) -> None:
     """Set up Papouch device from a config entry."""
     entry.async_on_unload(entry.add_update_listener(update_listener))
 
@@ -314,24 +448,17 @@ async def async_setup_entry(hass: HomeAssistant, entry: PapouchConfigEntry) -> b
     elif connection_type == "network_hub":
         coordinator = await _async_setup_network_hub_entry(hass, entry)
     else:
-        return False
+        _LOGGER.debug("Unsupported connection type: %s", connection_type)
 
     await coordinator.async_config_entry_first_refresh()
     entry.runtime_data = coordinator
 
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
 
-    return True
 
-
-async def async_unload_entry(hass: HomeAssistant, entry: PapouchConfigEntry) -> bool:
+async def async_unload_entry(hass: HomeAssistant, entry: PapouchConfigEntry) -> None:
     """Unload a config entry."""
-    unload_ok = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
-
-    if unload_ok:
-        await entry.runtime_data.async_close()
-
-    return unload_ok
+    await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
 
 
 async def update_listener(hass: HomeAssistant, entry: ConfigEntry) -> None:
