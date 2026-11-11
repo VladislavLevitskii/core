@@ -646,7 +646,7 @@ class PapouchConfigFlow(ConfigFlow, domain=DOMAIN):
                 tcp_port,
             ) = await self._async_validate_network_hub(host, password, web_port)
 
-            if not errors:
+            if not errors and title:
                 if device_mode != TCP_SERVER_MODE_INDEX:
                     self._saved_input = user_input
                     self._is_network_hub = True
@@ -667,9 +667,7 @@ class PapouchConfigFlow(ConfigFlow, domain=DOMAIN):
                 }
                 options = {"refresh_rate": user_input["refresh_rate"]}
 
-                return self.async_create_entry(
-                    title=f"{title} - {host}", data=data, options=options
-                )
+                return self.async_create_entry(title=title, data=data, options=options)
 
         schema = prob.Schema(
             {
@@ -911,7 +909,7 @@ class PapouchConfigFlow(ConfigFlow, domain=DOMAIN):
                 "web_port": web_port,
             }
 
-        return f"{title_name} - {address}", data, formatted_mac
+        return title_name, data, formatted_mac
 
     async def async_step_abort_switch(
         self,
@@ -981,7 +979,7 @@ class PapouchConfigFlow(ConfigFlow, domain=DOMAIN):
 
         entry = self._get_reconfigure_entry()
 
-        connection_type = entry.data.get("connection_type", ConnectionType.NETWORK)
+        connection_type = entry.data.get(CONNECTION_TYPE, ConnectionType.NETWORK)
 
         if connection_type == ConnectionType.SERIAL:
             return await self.async_step_reconfigure_serial(user_input)
@@ -1035,15 +1033,20 @@ class PapouchConfigFlow(ConfigFlow, domain=DOMAIN):
                 )
                 new_title = f"{new_name} - {user_input['ip_address']}"
 
-                return self.async_update_reload_and_abort(
+                updated_data = {
+                    **entry.data,
+                    "ip_address": ip_address,
+                    "password": password,
+                    "web_port": web_port,
+                }
+
+                self.hass.config_entries.async_update_entry(
                     entry,
-                    data_updates={
-                        "ip_address": ip_address,
-                        "password": password,
-                        "web_port": web_port,
-                    },
+                    data=updated_data,
                     title=new_title,
                 )
+
+                return self.async_abort(reason="reconfigure_successful")
 
         if user_input and "web_port" in user_input:
             web_port = user_input["web_port"]
@@ -1097,17 +1100,22 @@ class PapouchConfigFlow(ConfigFlow, domain=DOMAIN):
                     self._is_network_hub = True
                     return await self.async_step_web_mode()
 
-                return self.async_update_reload_and_abort(
+                updated_data = {
+                    **entry.data,
+                    "host": host,
+                    "baudrate": baudrate,
+                    "web_port": web_port,
+                    "password": password,
+                    "tcp_port": tcp_port,
+                }
+
+                self.hass.config_entries.async_update_entry(
                     entry,
-                    data_updates={
-                        "host": host,
-                        "baudrate": baudrate,
-                        "web_port": web_port,
-                        "password": password,
-                        "tcp_port": tcp_port,
-                    },
+                    data=updated_data,
                     title=title,
                 )
+
+                return self.async_abort(reason="reconfigure_successful")
 
         schema = prob.Schema(
             {
@@ -1148,14 +1156,19 @@ class PapouchConfigFlow(ConfigFlow, domain=DOMAIN):
 
             baudrate = user_input["baudrate"]
 
-            return self.async_update_reload_and_abort(
+            updated_data = {
+                **entry.data,
+                "port": port,
+                "baudrate": baudrate,
+            }
+
+            self.hass.config_entries.async_update_entry(
                 entry,
-                data_updates={
-                    "port": port,
-                    "baudrate": baudrate,
-                },
+                data=updated_data,
                 title=f"Papouch - {port}",
             )
+
+            return self.async_abort(reason="reconfigure_successful")
 
         list_of_ports = await self._async_get_available_serial_ports()
 
@@ -1191,14 +1204,19 @@ class PapouchConfigFlow(ConfigFlow, domain=DOMAIN):
             port = user_input["port"]
             baudrate = user_input["baudrate"]
 
-            return self.async_update_reload_and_abort(
+            updated_data = {
+                **entry.data,
+                "port": port,
+                "baudrate": baudrate,
+            }
+
+            self.hass.config_entries.async_update_entry(
                 entry,
-                data_updates={
-                    "port": port,
-                    "baudrate": baudrate,
-                },
+                data=updated_data,
                 title=f"Papouch - {port}",
             )
+
+            return self.async_abort(reason="reconfigure_successful")
 
         default_baudrate = entry.data.get("baudrate", DEFAULT_BAUDRATE)
         if self._saved_input:
@@ -1252,13 +1270,18 @@ class PapouchConfigFlow(ConfigFlow, domain=DOMAIN):
                 except DeviceAuthError:
                     errors["base"] = "invalid_auth"
                 else:
-                    return self.async_update_reload_and_abort(
+                    updated_data = {
+                        **entry.data,
+                        "host": host,
+                        "port": tcp_port,
+                    }
+
+                    self.hass.config_entries.async_update_entry(
                         entry,
-                        data_updates={
-                            "host": host,
-                            "port": tcp_port,
-                        },
+                        data=updated_data,
                     )
+
+                    return self.async_abort(reason="reconfigure_successful")
 
         schema = prob.Schema(
             {

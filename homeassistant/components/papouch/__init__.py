@@ -16,7 +16,7 @@ from aiopapouch.exceptions import (
     DeviceLogicError,
     DeviceParseError,
 )
-from pap_spinel import SerialTransport, SpinelTransportError, TcpTransport
+from pap_spinel import SerialTransport, TcpTransport
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import Platform
@@ -421,7 +421,7 @@ async def _async_setup_network_hub_entry(
 
     try:
         await serial_client.open()
-    except SpinelTransportError as err:
+    except DeviceConnectionError as err:
         raise ConfigEntryNotReady(
             translation_domain=DOMAIN,
             translation_key="cannot_connect_tcp",
@@ -454,14 +454,15 @@ async def async_setup_entry(hass: HomeAssistant, entry: PapouchConfigEntry) -> N
         case ConnectionType.NETWORK_HUB:
             coordinator = await _async_setup_network_hub_entry(hass, entry)
         case _:
+            placeholder = {
+                CONNECTION_TYPE: str(
+                    connection_type
+                ),  # in case we stored something else
+            }
             raise ConfigEntryError(
                 translation_domain=DOMAIN,
                 translation_key="unknown_connection_type",
-                translation_placeholders={
-                    "connection_type": str(
-                        connection_type
-                    ),  # in case we stored something else
-                },
+                translation_placeholders=placeholder,
             )
 
     await coordinator.async_config_entry_first_refresh()
@@ -472,7 +473,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: PapouchConfigEntry) -> N
 
 async def async_unload_entry(hass: HomeAssistant, entry: PapouchConfigEntry) -> None:
     """Unload a config entry."""
-    await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
+    unload_ok = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
+    if unload_ok:
+        await entry.runtime_data.async_close()
 
 
 async def update_listener(hass: HomeAssistant, entry: ConfigEntry) -> None:
