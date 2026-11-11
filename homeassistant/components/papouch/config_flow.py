@@ -13,6 +13,7 @@ from aiopapouch import (
     create_network_device,
     is_device_supported,
 )
+from aiopapouch.const import CONNECTION_TYPE, ConnectionType
 from aiopapouch.exceptions import (
     DeviceAuthError,
     DeviceConnectionError,
@@ -221,7 +222,7 @@ class PapouchConfigFlow(ConfigFlow, domain=DOMAIN):
             self._abort_if_unique_id_configured()
 
             data = {
-                "connection_type": "tcp",
+                CONNECTION_TYPE: ConnectionType.TCP,
                 "host": ip_address,
                 "port": tcp_port,
             }
@@ -247,7 +248,7 @@ class PapouchConfigFlow(ConfigFlow, domain=DOMAIN):
         self._abort_if_unique_id_configured()
 
         data = {
-            "connection_type": "network",
+            CONNECTION_TYPE: ConnectionType.NETWORK,
             "ip_address": ip_address,
             "password": password,
             "device_name": device_name,
@@ -335,7 +336,7 @@ class PapouchConfigFlow(ConfigFlow, domain=DOMAIN):
             )
             return self.async_abort(reason="auth_error")
 
-        if not is_device_supported(device_name, "network"):
+        if not is_device_supported(device_name, ConnectionType.NETWORK):
             return self.async_abort(reason="unsupported_device")
 
         title_name = f"{device_name} ({device_location})"
@@ -385,21 +386,21 @@ class PapouchConfigFlow(ConfigFlow, domain=DOMAIN):
     ) -> ConfigFlowResult:
         """Handle the initial step to choose between network or serial hub."""
         if user_input is not None:
-            connection_type = user_input.get("connection_type")
-            if connection_type == "network_device":
+            connection_type = user_input.get(CONNECTION_TYPE)
+            if connection_type == ConnectionType.NETWORK:
                 return await self.async_step_network_device()
-            if connection_type == "network_hub":
+            if connection_type == ConnectionType.NETWORK_HUB:
                 return await self.async_step_network_hub()
-            if connection_type == "serial_hub":
+            if connection_type == ConnectionType.SERIAL:
                 return await self.async_step_serial_hub()
 
         schema = prob.Schema(
             {
-                prob.Required("connection_type", default="network_device"): prob.In(
+                prob.Required(CONNECTION_TYPE, default=ConnectionType.NETWORK): prob.In(
                     {
-                        "network_device": "Network device",
-                        "network_hub": "Network hub",
-                        "serial_hub": "Serial hub",
+                        ConnectionType.NETWORK: "Network device",
+                        ConnectionType.NETWORK_HUB: "Network hub",
+                        ConnectionType.SERIAL: "Serial hub",
                     }
                 )
             }
@@ -425,7 +426,9 @@ class PapouchConfigFlow(ConfigFlow, domain=DOMAIN):
         if not errors:
             if self._discovered_ips is None:
                 session = async_get_clientsession(self.hass)
-                results = await async_discover_papouch_devices(session, "network")
+                results = await async_discover_papouch_devices(
+                    session, ConnectionType.NETWORK
+                )
 
                 configured_ips = {
                     entry.data.get("ip_address")
@@ -497,7 +500,7 @@ class PapouchConfigFlow(ConfigFlow, domain=DOMAIN):
             self._abort_if_unique_id_configured()
 
             data = {
-                "connection_type": "serial",
+                CONNECTION_TYPE: ConnectionType.SERIAL,
                 "port": port,
                 "baudrate": baudrate,
             }
@@ -564,7 +567,7 @@ class PapouchConfigFlow(ConfigFlow, domain=DOMAIN):
                 self._abort_if_unique_id_configured()
 
                 data = {
-                    "connection_type": "network_hub",
+                    CONNECTION_TYPE: ConnectionType.NETWORK_HUB,
                     "host": host,
                     "baudrate": baudrate,
                     "web_port": web_port,
@@ -584,7 +587,7 @@ class PapouchConfigFlow(ConfigFlow, domain=DOMAIN):
         if self._discovered_ips is None:
             session = async_get_clientsession(self.hass)
             results = await async_discover_papouch_devices(
-                session, connection_type="network_hub"
+                session, connection_type=ConnectionType.NETWORK_HUB
             )
 
             configured_hosts = {
@@ -655,7 +658,7 @@ class PapouchConfigFlow(ConfigFlow, domain=DOMAIN):
                 self._abort_if_unique_id_configured()
 
                 data = {
-                    "connection_type": "network_hub",
+                    CONNECTION_TYPE: ConnectionType.NETWORK_HUB,
                     "host": host,
                     "baudrate": user_input["baudrate"],
                     "web_port": web_port,
@@ -698,7 +701,7 @@ class PapouchConfigFlow(ConfigFlow, domain=DOMAIN):
             self._abort_if_unique_id_configured()
 
             data = {
-                "connection_type": "serial",
+                CONNECTION_TYPE: ConnectionType.SERIAL,
                 "port": port,
                 "baudrate": baudrate,
             }
@@ -882,7 +885,7 @@ class PapouchConfigFlow(ConfigFlow, domain=DOMAIN):
                 raise DeviceConnectionError("Cannot validate network hub")
 
             data = {
-                "connection_type": "network_hub",
+                CONNECTION_TYPE: ConnectionType.NETWORK_HUB,
                 "host": address,
                 "baudrate": self._saved_input["baudrate"],
                 "web_port": web_port,
@@ -978,9 +981,9 @@ class PapouchConfigFlow(ConfigFlow, domain=DOMAIN):
 
         entry = self._get_reconfigure_entry()
 
-        connection_type = entry.data.get("connection_type", "network")
+        connection_type = entry.data.get("connection_type", ConnectionType.NETWORK)
 
-        if connection_type == "serial":
+        if connection_type == ConnectionType.SERIAL:
             return await self.async_step_reconfigure_serial(user_input)
 
         # here we check the mode of the device if it responds
@@ -996,16 +999,22 @@ class PapouchConfigFlow(ConfigFlow, domain=DOMAIN):
             )
 
             if not errors:
-                if connection_type == "tcp" and mode_device != TCP_SERVER_MODE_INDEX:
+                if (
+                    connection_type == ConnectionType.TCP
+                    and mode_device != TCP_SERVER_MODE_INDEX
+                ):
                     return self.async_abort(reason="device_not_tcp_mode")
 
-                if connection_type == "network" and mode_device != WEB_MODE_INDEX:
+                if (
+                    connection_type == ConnectionType.NETWORK
+                    and mode_device != WEB_MODE_INDEX
+                ):
                     return self.async_abort(reason="device_not_web_mode")
 
-        if connection_type == "network_hub":
+        if connection_type == ConnectionType.NETWORK_HUB:
             return await self.async_step_reconfigure_network_hub(user_input)
 
-        if connection_type == "tcp":
+        if connection_type == ConnectionType.TCP:
             return await self.async_step_reconfigure_tcp(user_input)
 
         # else is plain network device

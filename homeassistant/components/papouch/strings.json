@@ -409,6 +409,9 @@
     "unable_open_port": {
       "message": "Unable to open {port}."
     },
+    "unknown_connection_type": {
+      "message": "Unknown or missing connection type: {connection_type}."
+    },
     "unsupported_device": {
       "message": "Device {name} ({location}) is unsupported."
     }

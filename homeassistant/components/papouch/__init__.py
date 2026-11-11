@@ -9,6 +9,7 @@ from aiopapouch import (
     create_network_device,
     create_serial_device,
 )
+from aiopapouch.const import CONNECTION_TYPE, ConnectionType
 from aiopapouch.exceptions import (
     DeviceAuthError,
     DeviceConnectionError,
@@ -19,7 +20,11 @@ from pap_spinel import SerialTransport, SpinelTransportError, TcpTransport
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import Platform
-from homeassistant.exceptions import ConfigEntryAuthFailed, ConfigEntryNotReady
+from homeassistant.exceptions import (
+    ConfigEntryAuthFailed,
+    ConfigEntryError,
+    ConfigEntryNotReady,
+)
 from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
@@ -437,18 +442,27 @@ async def async_setup_entry(hass: HomeAssistant, entry: PapouchConfigEntry) -> N
 
     coordinator: PapouchBaseCoordinator
 
-    connection_type = entry.data.get("connection_type", "network")
+    connection_type = entry.data.get(CONNECTION_TYPE)
 
-    if connection_type == "network":
-        coordinator = await _async_setup_network_entry(hass, entry)
-    elif connection_type == "serial":
-        coordinator = await _async_setup_serial_entry(hass, entry)
-    elif connection_type == "tcp":
-        coordinator = await _async_setup_tcp_entry(hass, entry)
-    elif connection_type == "network_hub":
-        coordinator = await _async_setup_network_hub_entry(hass, entry)
-    else:
-        _LOGGER.debug("Unsupported connection type: %s", connection_type)
+    match connection_type:
+        case ConnectionType.NETWORK:
+            coordinator = await _async_setup_network_entry(hass, entry)
+        case ConnectionType.SERIAL:
+            coordinator = await _async_setup_serial_entry(hass, entry)
+        case ConnectionType.TCP:
+            coordinator = await _async_setup_tcp_entry(hass, entry)
+        case ConnectionType.NETWORK_HUB:
+            coordinator = await _async_setup_network_hub_entry(hass, entry)
+        case _:
+            raise ConfigEntryError(
+                translation_domain=DOMAIN,
+                translation_key="unknown_connection_type",
+                translation_placeholders={
+                    "connection_type": str(
+                        connection_type
+                    ),  # in case we stored something else
+                },
+            )
 
     await coordinator.async_config_entry_first_refresh()
     entry.runtime_data = coordinator

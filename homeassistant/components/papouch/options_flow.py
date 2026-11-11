@@ -5,6 +5,7 @@ import logging
 from typing import Any
 
 from aiopapouch import is_device_supported
+from aiopapouch.const import CONNECTION_TYPE, ConnectionType
 from aiopapouch.exceptions import (
     DeviceConnectionError,
     DeviceLogicError,
@@ -37,9 +38,11 @@ class PapouchOptionsFlowHandler(OptionsFlow):
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
         """Manage the options."""
-        connection_type = self.config_entry.data.get("connection_type", "network")
+        connection_type = self.config_entry.data.get(
+            CONNECTION_TYPE, ConnectionType.NETWORK
+        )
 
-        if connection_type in ("serial", "network_hub"):
+        if connection_type in (ConnectionType.SERIAL, ConnectionType.NETWORK_HUB):
             # deep copy for HA comparison, otherwise options flow will be cancelled
             self._devices = copy.deepcopy(self.config_entry.options.get("devices", []))
             return await self.async_step_serial_menu()
@@ -153,7 +156,9 @@ class PapouchOptionsFlowHandler(OptionsFlow):
                     )
                     errors["base"] = "parse_error"
 
-                if not errors and not is_device_supported(device_name, "serial"):
+                if not errors and not is_device_supported(
+                    device_name, ConnectionType.SERIAL
+                ):
                     _LOGGER.debug(
                         "Adding device %s by address failed because it is unsupported",
                         device_name,
@@ -237,7 +242,7 @@ class PapouchOptionsFlowHandler(OptionsFlow):
                     errors["base"] = "no_free_addresses"
                 elif device_name is None:
                     errors["base"] = "assign_failed"
-                elif not is_device_supported(device_name, "serial"):
+                elif not is_device_supported(device_name, ConnectionType.SERIAL):
                     _LOGGER.debug(
                         "Adding device %s by address failed because it is unsupported",
                         device_name,
